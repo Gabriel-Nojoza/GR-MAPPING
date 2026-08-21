@@ -75,10 +75,17 @@ export function CanvasPoligono({
       if (pontos.length > 2) ctx.closePath();
       ctx.stroke();
 
-      pontos.forEach((p) => {
+      pontos.forEach((p, indice) => {
         ctx.beginPath();
         ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
         ctx.fill();
+        ctx.font = "bold 16px Arial";
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 4;
+        ctx.strokeText(`P${indice + 1}`, p.x + 10, p.y - 10);
+        ctx.fillStyle = "#0f172a";
+        ctx.fillText(`P${indice + 1}`, p.x + 10, p.y - 10);
+        ctx.fillStyle = "#2563eb";
       });
     }
   }

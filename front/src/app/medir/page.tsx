@@ -233,6 +233,10 @@ export default function MedirTerreno() {
               pontosReferencia={referenciaPontos}
               onAdicionarPonto={aoClicarCanvas}
             />
+            <p className="mt-3 rounded-lg bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-800">
+              Para registrar frente, fundo e laterais, marque exatamente 4 pontos no sentido horário:
+              P1→P2 é a frente, P2→P3 a lateral direita, P3→P4 o fundo e P4→P1 a lateral esquerda.
+            </p>
             <div className="mt-3 flex gap-2">
               <Button variant="secondary" onClick={limparPontos}>
                 Limpar pontos

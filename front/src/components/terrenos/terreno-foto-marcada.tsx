@@ -8,6 +8,21 @@ export function TerrenoFotoMarcada({ terreno }: { terreno: Terreno }) {
   const [fotoComErro, setFotoComErro] = useState(false);
   const [dimensoes, setDimensoes] = useState<{ largura: number; altura: number } | null>(null);
   const temMarcacao = terreno.pontos.length >= 3;
+  const temQuatroLados = terreno.pontos.length === 4;
+
+  function distanciaMetros(inicio: [number, number], fim: [number, number]) {
+    const pixels = Math.hypot(fim[0] - inicio[0], fim[1] - inicio[1]);
+    return (pixels * terreno.gsd_cm_por_px) / 100;
+  }
+
+  const medidas = temQuatroLados
+    ? [
+        { rotulo: "Frente", valor: distanciaMetros(terreno.pontos[0], terreno.pontos[1]) },
+        { rotulo: "Lateral direita", valor: distanciaMetros(terreno.pontos[1], terreno.pontos[2]) },
+        { rotulo: "Fundo", valor: distanciaMetros(terreno.pontos[2], terreno.pontos[3]) },
+        { rotulo: "Lateral esquerda", valor: distanciaMetros(terreno.pontos[3], terreno.pontos[0]) },
+      ]
+    : [];
 
   if (fotoComErro) {
     return (
@@ -47,7 +62,12 @@ export function TerrenoFotoMarcada({ terreno }: { terreno: Terreno }) {
               vectorEffect="non-scaling-stroke"
             />
             {terreno.pontos.map(([x, y], indice) => (
-              <circle key={indice} cx={x} cy={y} r="6" fill="#2563eb" stroke="white" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+              <g key={indice}>
+                <circle cx={x} cy={y} r="7" fill="#2563eb" stroke="white" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+                <text x={x + 11} y={y - 10} fill="white" stroke="#0f172a" strokeWidth="3" paintOrder="stroke" fontSize="15" fontWeight="700">
+                  P{indice + 1}
+                </text>
+              </g>
             ))}
           </svg>
         )}
@@ -60,6 +80,19 @@ export function TerrenoFotoMarcada({ terreno }: { terreno: Terreno }) {
 
       {!temMarcacao && (
         <p className="mt-2 text-xs text-slate-400">A marcação não está disponível para medições antigas.</p>
+      )}
+      {temMarcacao && !temQuatroLados && (
+        <p className="mt-2 text-xs text-amber-700">Marque exatamente 4 pontos para identificar frente, fundo e laterais.</p>
+      )}
+      {temQuatroLados && (
+        <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-3">
+          {medidas.map((medida) => (
+            <div key={medida.rotulo} className="rounded-lg bg-white px-3 py-2 shadow-sm ring-1 ring-slate-100">
+              <p className="text-xs text-slate-500">{medida.rotulo}</p>
+              <p className="mt-0.5 text-sm font-semibold text-slate-800">{medida.valor.toFixed(1)} m</p>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
