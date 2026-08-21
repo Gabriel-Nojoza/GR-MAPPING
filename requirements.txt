@@ -1,5 +1,3 @@
-
-Requirements · TXT
 Pillow
 piexif
 fastapi
@@ -8,4 +6,3 @@ python-multipart
 shapely
 google-genai
 python-dotenv
-
