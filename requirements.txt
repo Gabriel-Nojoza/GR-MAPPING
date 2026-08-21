@@ -1,0 +1,11 @@
+
+Requirements · TXT
+Pillow
+piexif
+fastapi
+uvicorn[standard]
+python-multipart
+shapely
+google-genai
+python-dotenv
+

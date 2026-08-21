@@ -1,0 +1,194 @@
+"""
+Persistência simples em SQLite — histórico de terrenos medidos e de jobs de
+geração de projeto, pra alimentar o Painel com dados reais.
+
+Um arquivo .db local é suficiente pra uma API de instância única (mesmo
+raciocínio do job store em memória, ver app/jobs.py). Se um dia rodar com
+mais de um worker, troque por um banco compartilhado antes de escalar.
+"""
+from __future__ import annotations
+
+import os
+import sqlite3
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+DB_PATH = Path(os.environ.get("MEDICAO_DB_PATH")
+                or Path(__file__).resolve().parent.parent / "dados.db")
+
+_STATUS_ROTULO = {
+    "processando": "Vídeo em processamento",
+    "pronto": "Vídeo gerado",
+    "erro": "Falha ao gerar vídeo",
+}
+
+
+def _conectar() -> sqlite3.Connection:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db() -> None:
+    with _conectar() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS terrenos (
+                id TEXT PRIMARY KEY,
+                criado_em TEXT NOT NULL,
+                nome_foto TEXT,
+                area_m2 REAL NOT NULL,
+                area_ha REAL NOT NULL,
+                perimetro_m REAL NOT NULL,
+                gsd_cm_por_px REAL NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS jobs (
+                id TEXT PRIMARY KEY,
+                criado_em TEXT NOT NULL,
+                atualizado_em TEXT NOT NULL,
+                status TEXT NOT NULL,
+                descricao TEXT,
+                erro TEXT
+            )
+        """)
+        # migração leve: adiciona a coluna "nome" se o banco já existia sem ela
+        colunas = {r["name"] for r in conn.execute("PRAGMA table_info(terrenos)")}
+        if "nome" not in colunas:
+            conn.execute("ALTER TABLE terrenos ADD COLUMN nome TEXT")
+
+        # migração leve: agrupamento de jobs que fazem parte da mesma
+        # "evolução da obra" (várias etapas geradas a partir de uma descrição)
+        colunas_jobs = {r["name"] for r in conn.execute("PRAGMA table_info(jobs)")}
+        if "grupo_id" not in colunas_jobs:
+            conn.execute("ALTER TABLE jobs ADD COLUMN grupo_id TEXT")
+        if "etapa" not in colunas_jobs:
+            conn.execute("ALTER TABLE jobs ADD COLUMN etapa TEXT")
+
+
+def _agora() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def salvar_terreno(id_: str, nome_foto: str | None, area_m2: float, area_ha: float,
+                    perimetro_m: float, gsd_cm_por_px: float, nome: str | None = None) -> None:
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO terrenos (id, criado_em, nome_foto, area_m2, area_ha, "
+            "perimetro_m, gsd_cm_por_px, nome) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (id_, _agora(), nome_foto, area_m2, area_ha, perimetro_m, gsd_cm_por_px, nome),
+        )
+
+
+def registrar_job(id_: str, descricao: str, grupo_id: str | None = None,
+                   etapa: str | None = None) -> None:
+    with _conectar() as conn:
+        agora = _agora()
+        conn.execute(
+            "INSERT INTO jobs (id, criado_em, atualizado_em, status, descricao, erro, "
+            "grupo_id, etapa) VALUES (?, ?, ?, 'processando', ?, NULL, ?, ?)",
+            (id_, agora, agora, descricao, grupo_id, etapa),
+        )
+
+
+def listar_jobs_do_grupo(grupo_id: str) -> list[sqlite3.Row]:
+    with _conectar() as conn:
+        return conn.execute(
+            "SELECT * FROM jobs WHERE grupo_id = ? ORDER BY criado_em ASC", (grupo_id,)
+        ).fetchall()
+
+
+def atualizar_status_job(id_: str, status: str, erro: str | None = None) -> None:
+    with _conectar() as conn:
+        conn.execute(
+            "UPDATE jobs SET status = ?, erro = ?, atualizado_em = ? WHERE id = ?",
+            (status, erro, _agora(), id_),
+        )
+
+
+def listar_terrenos(limite: int = 50) -> list[sqlite3.Row]:
+    with _conectar() as conn:
+        return conn.execute(
+            "SELECT * FROM terrenos ORDER BY criado_em DESC LIMIT ?", (limite,)
+        ).fetchall()
+
+
+def listar_jobs(limite: int = 50) -> list[sqlite3.Row]:
+    with _conectar() as conn:
+        return conn.execute(
+            "SELECT * FROM jobs ORDER BY criado_em DESC LIMIT ?", (limite,)
+        ).fetchall()
+
+
+def resumo() -> dict:
+    with _conectar() as conn:
+        total_terrenos, area_total_m2 = conn.execute(
+            "SELECT COUNT(*), COALESCE(SUM(area_m2), 0) FROM terrenos"
+        ).fetchone()
+        total_videos = conn.execute(
+            "SELECT COUNT(*) FROM jobs WHERE status = 'pronto'"
+        ).fetchone()[0]
+        videos_processando = conn.execute(
+            "SELECT COUNT(*) FROM jobs WHERE status = 'processando'"
+        ).fetchone()[0]
+
+        desde = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        terrenos_7dias = conn.execute(
+            "SELECT COUNT(*) FROM terrenos WHERE criado_em >= ?", (desde,)
+        ).fetchone()[0]
+
+        por_dia = conn.execute(
+            "SELECT substr(criado_em, 1, 10) AS dia, COUNT(*) AS n "
+            "FROM terrenos WHERE criado_em >= ? GROUP BY dia",
+            (desde,),
+        ).fetchall()
+
+    return {
+        "total_terrenos": total_terrenos,
+        "area_total_m2": area_total_m2,
+        "total_videos": total_videos,
+        "videos_processando": videos_processando,
+        "terrenos_7dias": terrenos_7dias,
+        "medicoes_por_dia": {r["dia"]: r["n"] for r in por_dia},
+    }
+
+
+def atividades_recentes(limite: int = 8) -> list[dict]:
+    """Junta terrenos medidos + jobs de vídeo numa única linha do tempo."""
+    itens: list[dict] = []
+
+    for t in listar_terrenos(limite):
+        detalhe = (f"{t['area_ha']:.2f} ha" if t["area_ha"] >= 1
+                    else f"{t['area_m2']:.0f} m²")
+        itens.append({
+            "tipo": "terreno",
+            "criado_em": t["criado_em"],
+            "titulo": t["nome"] or "Terreno medido",
+            "detalhe": detalhe,
+        })
+
+    for j in listar_jobs(limite):
+        itens.append({
+            "tipo": "video",
+            "criado_em": j["atualizado_em"],
+            "titulo": _STATUS_ROTULO[j["status"]],
+            "detalhe": j["descricao"] or "",
+        })
+
+    itens.sort(key=lambda i: i["criado_em"], reverse=True)
+    return itens[:limite]
+
+
+def renomear_terreno(id_: str, nome: str | None) -> bool:
+    """Atualiza o nome do terreno. Devolve False se o id não existir."""
+    with _conectar() as conn:
+        cur = conn.execute("UPDATE terrenos SET nome = ? WHERE id = ?", (nome, id_))
+        return cur.rowcount > 0
+
+
+def excluir_terreno(id_: str) -> bool:
+    """Remove o terreno. Devolve False se o id não existir."""
+    with _conectar() as conn:
+        cur = conn.execute("DELETE FROM terrenos WHERE id = ?", (id_,))
+        return cur.rowcount > 0

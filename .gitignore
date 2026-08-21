@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+scripts/projeto_gerado.*
+dados.db
+uploads/
+.pytest_cache/

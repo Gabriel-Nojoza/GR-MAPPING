@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: medicao-terreno-api
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /saude
+    disk:
+      name: medicao-terreno-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: MEDICAO_DB_PATH
+        value: /var/data/dados.db
+      - key: MEDICAO_UPLOADS_DIR
+        value: /var/data/uploads
+      - key: CORS_ORIGINS
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: LOGIN_USER_1_EMAIL
+        sync: false
+      - key: LOGIN_USER_1_PASSWORD
+        sync: false
+      - key: LOGIN_USER_2_EMAIL
+        sync: false
+      - key: LOGIN_USER_2_PASSWORD
+        sync: false
