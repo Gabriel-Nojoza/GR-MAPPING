@@ -1,83 +1,89 @@
-import { ImageIcon, PlayCircle } from "lucide-react";
+"use client";
+
+import { useEffect, useState } from "react";
+import { AlertCircle, Download, ImageIcon, PlayCircle, Sparkles } from "lucide-react";
 import { API_URL, getVideos } from "@/lib/api";
 import { Card } from "@/components/ui/card";
+import type { JobResumo } from "@/types/job";
 
-const STATUS_LABEL: Record<string, string> = {
-  processando: "Processando",
-  pronto: "Pronto",
-  erro: "Erro",
-};
+const STATUS = {
+  processando: { label: "Processando", className: "bg-amber-50 text-amber-700" },
+  pronto: { label: "Pronto", className: "bg-emerald-50 text-emerald-700" },
+  erro: { label: "Não gerado", className: "bg-red-50 text-red-700" },
+} as const;
 
-const STATUS_CLASS: Record<string, string> = {
-  processando: "bg-amber-50 text-amber-700",
-  pronto: "bg-green-50 text-green-700",
-  erro: "bg-red-50 text-red-700",
-};
+function resumo(descricao: string | null) {
+  if (!descricao) return "Projeto sem descrição";
+  const primeiraFrase = descricao.replace(/\s+/g, " ").split(/[.!?]/)[0].trim();
+  return primeiraFrase.length > 150 ? `${primeiraFrase.slice(0, 147)}...` : primeiraFrase;
+}
 
-export default async function Videos() {
-  let videos;
-  try {
-    videos = await getVideos();
-  } catch {
-    return (
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Visualizações (vídeos)</h1>
-        <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
-          Não consegui falar com a API. Confirme que ela está rodando em{" "}
-          <code>uvicorn app.main:app --reload</code>.
-        </p>
-      </div>
-    );
-  }
+export default function Videos() {
+  const [videos, setVideos] = useState<JobResumo[]>([]);
+  const [erro, setErro] = useState(false);
+
+  useEffect(() => {
+    getVideos().then(setVideos).catch(() => setErro(true));
+  }, []);
 
   return (
-    <div>
-      <h1 className="text-2xl font-semibold text-slate-900">Visualizações (vídeos)</h1>
-      <p className="mt-1 text-sm text-slate-500">Projetos gerados por IA a partir das fotos.</p>
+    <div className="mx-auto max-w-6xl">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-primary">Projetos criados</p>
+          <h1 className="mt-1 text-2xl font-semibold text-slate-900">Visualizações</h1>
+          <p className="mt-1 text-sm text-slate-500">Imagens geradas por IA e vídeos montados na VPS.</p>
+        </div>
+        <div className="flex items-center gap-2 rounded-full bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">
+          <Sparkles size={15} /> Vídeo econômico ativado
+        </div>
+      </div>
 
-      <div className="mt-6 flex flex-col gap-3">
-        {videos.length === 0 && (
-          <Card className="text-sm text-slate-400">Nenhum projeto gerado ainda.</Card>
-        )}
-        {videos.map((v) => (
-          <Card key={v.id} className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-800">{v.descricao ?? "Sem descrição"}</p>
-              <p className="mt-1 text-xs text-slate-400">
-                {new Date(v.criado_em).toLocaleString("pt-BR")}
-              </p>
-              {v.status === "erro" && v.erro && (
-                <p className="mt-1 text-xs text-red-600">{v.erro}</p>
+      {erro && (
+        <Card className="mt-6 flex items-center gap-3 border-red-100 bg-red-50 text-sm text-red-700">
+          <AlertCircle size={18} /> Não foi possível carregar os projetos agora.
+        </Card>
+      )}
+
+      {!erro && videos.length === 0 && (
+        <Card className="mt-6 py-12 text-center text-sm text-slate-400">Nenhum projeto gerado ainda.</Card>
+      )}
+
+      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {videos.map((video) => {
+          const status = STATUS[video.status as keyof typeof STATUS] ?? STATUS.erro;
+          return (
+            <Card key={video.id} className="flex flex-col gap-4 p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-base font-semibold text-slate-800">{resumo(video.descricao)}</p>
+                  <p className="mt-1 text-xs text-slate-400">{new Date(video.criado_em).toLocaleString("pt-BR")}</p>
+                </div>
+                <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${status.className}`}>{status.label}</span>
+              </div>
+
+              {video.status === "erro" && (
+                <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+                  A geração não foi concluída. Verifique se há crédito para criar a imagem na IA.
+                </p>
               )}
-            </div>
 
-            <div className="flex items-center gap-3">
-              <span
-                className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_CLASS[v.status]}`}
-              >
-                {STATUS_LABEL[v.status] ?? v.status}
-              </span>
-              {v.status === "pronto" && (
-                <div className="flex gap-2 text-xs">
-                  <a
-                    href={`${API_URL}/videos-salvos/${v.id}/imagem`}
-                    target="_blank"
-                    className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-slate-600 hover:bg-slate-50"
-                  >
-                    <ImageIcon size={14} /> Imagem
+              {video.status === "pronto" && (
+                <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4 text-sm">
+                  <a href={`${API_URL}/videos-salvos/${video.id}/imagem`} target="_blank" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 font-medium text-slate-700 hover:bg-slate-50">
+                    <ImageIcon size={16} /> Imagem
                   </a>
-                  <a
-                    href={`${API_URL}/videos-salvos/${v.id}/video`}
-                    target="_blank"
-                    className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-slate-600 hover:bg-slate-50"
-                  >
-                    <PlayCircle size={14} /> Vídeo
+                  <a href={`${API_URL}/videos-salvos/${video.id}/video`} target="_blank" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 font-medium text-slate-700 hover:bg-slate-50">
+                    <PlayCircle size={16} /> Assistir
+                  </a>
+                  <a href={`${API_URL}/videos-salvos/${video.id}/download`} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 font-medium text-white hover:bg-primary-hover">
+                    <Download size={16} /> Baixar MP4
                   </a>
                 </div>
               )}
-            </div>
-          </Card>
-        ))}
+            </Card>
+          );
+        })}
       </div>
     </div>
   );

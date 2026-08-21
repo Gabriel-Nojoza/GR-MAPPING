@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Download, Loader2, X } from "lucide-react";
+import { Download, ImagePlus, Loader2, Sparkles, X } from "lucide-react";
 import { UploadFoto } from "@/components/medir/upload-foto";
 import { API_URL, estenderProjeto, gerarProjeto, getTerrenos, statusProjeto } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import type { Terreno } from "@/types/terreno";
 
 type Status = "idle" | "processando" | "pronto" | "erro";
@@ -14,13 +15,13 @@ export default function GerarProjeto() {
   const [fonte, setFonte] = useState<Fonte>("upload");
   const [terrenosSalvos, setTerrenosSalvos] = useState<Terreno[]>([]);
   const [terrenoSelecionadoId, setTerrenoSelecionadoId] = useState("");
-
   const [foto, setFoto] = useState<File | null>(null);
   const [fotoUrl, setFotoUrl] = useState<string | null>(null);
-  const [fotoAlternativaUrl, setFotoAlternativaUrl] = useState<string | null>(null);
   const [referencia, setReferencia] = useState<File | null>(null);
   const [referenciaUrl, setReferenciaUrl] = useState<string | null>(null);
-  const [descricao, setDescricao] = useState("");
+  const [descricao, setDescricao] = useState(() =>
+    typeof window === "undefined" ? "" : localStorage.getItem("gerarProjeto:ultimaDescricao") ?? "",
+  );
   const [jobId, setJobId] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [duracaoTotal, setDuracaoTotal] = useState(0);
@@ -29,29 +30,28 @@ export default function GerarProjeto() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    getTerrenos()
-      .then(setTerrenosSalvos)
-      .catch(() => {});
-
-    const ultimaDescricao = localStorage.getItem("gerarProjeto:ultimaDescricao");
-    if (ultimaDescricao) setDescricao(ultimaDescricao);
+    getTerrenos().then(setTerrenosSalvos).catch(() => {});
   }, []);
 
-  useEffect(() => {
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
+  useEffect(() => () => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
   }, []);
 
   function pollar(idJob: string) {
     if (intervalRef.current) clearInterval(intervalRef.current);
     intervalRef.current = setInterval(async () => {
-      const atual = await statusProjeto(idJob);
-      setDuracaoTotal(atual.duracao_total_s);
-      setPodeEstender(atual.pode_estender);
-      if (atual.status === "pronto" || atual.status === "erro") {
-        setStatus(atual.status);
-        if (atual.erro) setErro(atual.erro);
+      try {
+        const atual = await statusProjeto(idJob);
+        setDuracaoTotal(atual.duracao_total_s);
+        setPodeEstender(atual.pode_estender);
+        if (atual.status === "pronto" || atual.status === "erro") {
+          setStatus(atual.status);
+          if (atual.erro) setErro(atual.erro);
+          if (intervalRef.current) clearInterval(intervalRef.current);
+        }
+      } catch {
+        setStatus("erro");
+        setErro("Não foi possível acompanhar a geração. Tente atualizar a página.");
         if (intervalRef.current) clearInterval(intervalRef.current);
       }
     }, 4000);
@@ -61,27 +61,23 @@ export default function GerarProjeto() {
     setFonte(nova);
     setFoto(null);
     setFotoUrl(null);
-    setFotoAlternativaUrl(null);
     setTerrenoSelecionadoId("");
     setErro(null);
   }
 
   function aoSelecionarFoto(arquivo: File) {
-    if (fonte === "salvo") {
-      setFoto(arquivo);
-      setFotoAlternativaUrl(URL.createObjectURL(arquivo));
-      return;
-    }
     setFoto(arquivo);
     setFotoUrl(URL.createObjectURL(arquivo));
   }
 
+  function aoSelecionarTerreno(id: string) {
+    setTerrenoSelecionadoId(id);
+    setFoto(null);
+    setFotoUrl(id ? `${API_URL}/terrenos/${id}/foto` : null);
+  }
+
   function removerFoto() {
     setFoto(null);
-    if (fonte === "salvo" && terrenoSelecionadoId) {
-      setFotoAlternativaUrl(null);
-      return;
-    }
     setFotoUrl(null);
     setTerrenoSelecionadoId("");
   }
@@ -91,21 +87,8 @@ export default function GerarProjeto() {
     setReferenciaUrl(URL.createObjectURL(arquivo));
   }
 
-  function removerReferencia() {
-    setReferencia(null);
-    setReferenciaUrl(null);
-  }
-
-  function aoSelecionarTerreno(id: string) {
-    setTerrenoSelecionadoId(id);
-    setFoto(null);
-    setFotoAlternativaUrl(null);
-    setFotoUrl(id ? `${API_URL}/terrenos/${id}/foto` : null);
-  }
-
   async function obterArquivo(): Promise<File | null> {
     if (fonte === "upload") return foto;
-
     if (!terrenoSelecionadoId) {
       setErro("Escolha um terreno salvo.");
       return null;
@@ -115,39 +98,25 @@ export default function GerarProjeto() {
       const res = await fetch(`${API_URL}/terrenos/${terrenoSelecionadoId}/foto`);
       if (!res.ok) throw new Error();
       const blob = await res.blob();
-      return new File([blob], `terreno-${terrenoSelecionadoId}.jpg`, {
-        type: blob.type || "image/jpeg",
-      });
+      return new File([blob], `terreno-${terrenoSelecionadoId}.jpg`, { type: blob.type || "image/jpeg" });
     } catch {
-      setErro(
-        "Não consegui carregar a foto desse terreno (ele pode ter sido medido antes desse recurso existir).",
-      );
+      setErro("Não consegui carregar a foto deste terreno salvo.");
       return null;
     }
   }
 
-  function montarDescricaoFinal(): string {
-    if (fonte !== "salvo") return descricao;
-
-    const terreno = terrenosSalvos.find((t) => t.id === terrenoSelecionadoId);
-    if (!terreno) return descricao;
-
-    const medidas =
-      `Dados reais do terreno: área de ${terreno.area_m2.toFixed(0)} m² ` +
-      `(${terreno.area_ha.toFixed(3)} ha), perímetro de ${terreno.perimetro_m.toFixed(1)} m. ` +
-      `A construção deve respeitar essas dimensões reais do lote.`;
-
-    return `${descricao.trim()}\n\n${medidas}`;
+  function montarDescricaoFinal() {
+    const terreno = terrenosSalvos.find((item) => item.id === terrenoSelecionadoId);
+    if (fonte !== "salvo" || !terreno) return descricao.trim();
+    return `${descricao.trim()}\n\nDados reais do terreno: área de ${terreno.area_m2.toFixed(0)} m² (${terreno.area_ha.toFixed(3)} ha) e perímetro de ${terreno.perimetro_m.toFixed(1)} m. A construção deve respeitar essas dimensões e os limites do lote.`;
   }
 
   async function enviar() {
     if (!descricao.trim()) {
-      setErro("Descreva o que você quer construir (casa, apartamento, galpão etc).");
+      setErro("Descreva o que você quer construir.");
       return;
     }
-
     localStorage.setItem("gerarProjeto:ultimaDescricao", descricao);
-
     const arquivo = await obterArquivo();
     if (!arquivo) return;
 
@@ -156,245 +125,108 @@ export default function GerarProjeto() {
     setJobId(null);
     setDuracaoTotal(0);
     setPodeEstender(false);
-
     try {
       const inicial = await gerarProjeto(arquivo, montarDescricaoFinal(), referencia ?? undefined);
       setJobId(inicial.job_id);
       pollar(inicial.job_id);
-    } catch (e) {
+    } catch (causa) {
       setStatus("erro");
-      setErro(e instanceof Error ? e.message : "Erro ao gerar o projeto");
+      setErro(causa instanceof Error ? causa.message : "Erro ao gerar o projeto.");
     }
   }
 
   async function estender() {
     if (!jobId) return;
-    setErro(null);
     setStatus("processando");
     try {
       await estenderProjeto(jobId);
       pollar(jobId);
-    } catch (e) {
+    } catch (causa) {
       setStatus("pronto");
-      setErro(e instanceof Error ? e.message : "Erro ao estender o vídeo");
+      setErro(causa instanceof Error ? causa.message : "Erro ao estender o vídeo.");
     }
   }
 
   const gerando = status === "processando";
+  const terrenoAtual = terrenosSalvos.find((item) => item.id === terrenoSelecionadoId);
 
   return (
-    <div>
-      <h1 className="text-2xl font-semibold text-slate-900">Gerar Projeto IA</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        Escolha a foto do terreno e descreva o tipo de construção (casa, apartamento, galpão
-        etc). A geração leva alguns minutos.
-      </p>
-
-      <div className="mt-4 flex gap-4 text-sm">
-        <button
-          onClick={() => trocarFonte("upload")}
-          className={
-            fonte === "upload" ? "font-medium text-primary" : "text-slate-500 hover:text-slate-700"
-          }
-        >
-          Nova foto
-        </button>
-        <button
-          onClick={() => trocarFonte("salvo")}
-          className={
-            fonte === "salvo" ? "font-medium text-primary" : "text-slate-500 hover:text-slate-700"
-          }
-        >
-          Terreno salvo
-        </button>
+    <div className="mx-auto max-w-6xl">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-primary">Criação assistida</p>
+          <h1 className="mt-1 text-2xl font-semibold text-slate-900">Gerar projeto IA</h1>
+          <p className="mt-1 text-sm text-slate-500">A IA cria a imagem da casa e a VPS monta o vídeo, sem custo de vídeo por crédito.</p>
+        </div>
+        <div className="flex items-center gap-2 rounded-full bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">
+          <Sparkles size={15} /> Imagem IA + vídeo econômico
+        </div>
       </div>
 
-      {fonte === "salvo" && (
-        <p className="mt-2 text-xs text-slate-400">
-          A área e o perímetro reais do terreno escolhido são enviados junto pra IA
-          automaticamente — você só descreve o tipo de construção.
-        </p>
-      )}
-
-      {fonte === "upload" && (
-        <div className="mt-4 max-w-md">
-          <UploadFoto onSelecionar={aoSelecionarFoto} />
-        </div>
-      )}
-
-      {fonte === "salvo" && (
-        <div className="mt-4 max-w-md">
-          <select
-            value={terrenoSelecionadoId}
-            onChange={(e) => aoSelecionarTerreno(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 bg-white p-2 text-sm focus:border-primary focus:outline-none"
-          >
-            <option value="">Escolha um terreno...</option>
-            {terrenosSalvos.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.nome ?? t.nome_foto ?? t.id} — {t.area_ha.toFixed(3)} ha ({t.perimetro_m.toFixed(1)} m perímetro)
-              </option>
-            ))}
-          </select>
-          {terrenosSalvos.length === 0 && (
-            <p className="mt-2 text-xs text-slate-400">Nenhum terreno salvo ainda.</p>
-          )}
-        </div>
-      )}
-
-      {fonte === "salvo" && terrenoSelecionadoId && (
-        <div className="mt-4 max-w-md">
-          <label className="block text-xs font-medium text-slate-500">
-            Outra foto do mesmo terreno — opcional
-          </label>
-          <p className="mt-0.5 text-xs text-slate-400">
-            Use uma foto inclinada ou tirada da rua. A área e o perímetro continuam vindo do terreno salvo.
-          </p>
-          <div className="mt-2">
-            <UploadFoto
-              onSelecionar={aoSelecionarFoto}
-              titulo="Adicionar outra foto do mesmo terreno"
-              ajuda="PNG ou JPG: use uma foto com boa visão da fachada e da rua"
-            />
+      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
+        <Card className="p-5 sm:p-6">
+          <div className="flex rounded-xl bg-slate-100 p-1 text-sm font-medium">
+            <button onClick={() => trocarFonte("upload")} className={`flex-1 rounded-lg px-3 py-2 transition ${fonte === "upload" ? "bg-white text-primary shadow-sm" : "text-slate-500"}`}>Nova foto</button>
+            <button onClick={() => trocarFonte("salvo")} className={`flex-1 rounded-lg px-3 py-2 transition ${fonte === "salvo" ? "bg-white text-primary shadow-sm" : "text-slate-500"}`}>Terreno salvo</button>
           </div>
-        </div>
-      )}
 
-      {fotoUrl && (
-        <div className="relative mt-4 max-w-md">
-        <img
-          src={fotoUrl}
-          alt="Foto do terreno"
-          className="w-full rounded-2xl border border-slate-200"
-          onError={() => setErro("Esse terreno não tem foto salva.")}
-        />
-          {fonte === "upload" && (
-          <button
-            type="button"
-            onClick={removerFoto}
-            aria-label="Remover foto do terreno"
-            title="Remover foto"
-            className="absolute right-3 top-3 rounded-full bg-slate-900/80 p-2 text-white shadow-sm transition-colors hover:bg-red-600"
-          >
-            <X size={16} />
-          </button>
-          )}
-        </div>
-      )}
-
-      {fotoAlternativaUrl && (
-        <div className="relative mt-4 max-w-md">
-          <p className="mb-2 text-xs font-medium text-slate-500">
-            Foto adicional usada para gerar a fachada
-          </p>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={fotoAlternativaUrl}
-            alt="Outra foto do mesmo terreno"
-            className="w-full rounded-2xl border border-indigo-200"
-          />
-          <button
-            type="button"
-            onClick={removerFoto}
-            aria-label="Remover foto adicional"
-            title="Remover foto adicional"
-            className="absolute right-3 top-9 rounded-full bg-slate-900/80 p-2 text-white shadow-sm transition-colors hover:bg-red-600"
-          >
-            <X size={16} />
-          </button>
-        </div>
-      )}
-
-      <div className="mt-4 max-w-md">
-        <label className="block text-xs font-medium text-slate-500">
-          Foto de referência de estilo — opcional
-        </label>
-        <p className="mt-0.5 text-xs text-slate-400">
-          Uma foto de uma casa pronta que a IA deve usar como inspiração de fachada/acabamento,
-          em vez de inventar sozinha.
-        </p>
-
-        {!referenciaUrl && (
-          <div className="mt-2">
-            <UploadFoto
-              onSelecionar={aoSelecionarReferencia}
-              titulo="Clique ou arraste a foto da casa de referência"
-              ajuda="Opcional: PNG ou JPG de uma casa cujo estilo você quer usar"
-            />
-          </div>
-        )}
-
-        {referenciaUrl && (
-          <div className="mt-2 flex items-center gap-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={referenciaUrl}
-              alt="Referência de estilo"
-              className="h-20 w-20 rounded-lg border border-slate-200 object-cover"
-            />
-            <Button variant="secondary" onClick={removerReferencia}>
-              Remover referência
-            </Button>
-          </div>
-        )}
-      </div>
-
-      <textarea
-        value={descricao}
-        onChange={(e) => setDescricao(e.target.value)}
-        placeholder='Ex: "casa térrea com piscina e jardim"'
-        className="mt-4 w-full max-w-md rounded-xl border border-slate-200 bg-white p-3 text-sm shadow-sm focus:border-primary focus:outline-none"
-        rows={3}
-      />
-
-      <div className="mt-3">
-        <Button onClick={enviar} disabled={gerando}>
-          {gerando && <Loader2 size={16} className="animate-spin" />}
-          {gerando ? "Gerando..." : "Gerar projeto"}
-        </Button>
-      </div>
-
-      {erro && (
-        <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{erro}</p>
-      )}
-
-      {status === "processando" && (
-        <p className="mt-4 text-sm text-slate-500">
-          Processando job {jobId} — isso pode levar alguns minutos.
-        </p>
-      )}
-
-      {status === "pronto" && jobId && (
-        <div className="mt-4 flex flex-col gap-4">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={`${API_URL}/gerar-projeto/${jobId}/imagem`}
-            alt="Projeto gerado"
-            className="max-w-md rounded-2xl border border-slate-200"
-          />
-          <video
-            key={duracaoTotal}
-            src={`${API_URL}/gerar-projeto/${jobId}/video?v=${duracaoTotal}`}
-            controls
-            className="max-w-md rounded-2xl border border-slate-200"
-          />
-          <div className="flex items-center gap-3">
-            <p className="text-xs text-slate-400">Duração atual: {duracaoTotal}s</p>
-            <a
-              href={`${API_URL}/videos-salvos/${jobId}/download`}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-            >
-              <Download size={16} /> Salvar vídeo
-            </a>
-            {podeEstender && (
-              <Button variant="secondary" onClick={estender} disabled={gerando}>
-                {gerando && <Loader2 size={14} className="animate-spin" />}
-                {gerando ? "Estendendo..." : "Estender vídeo (+7s)"}
-              </Button>
+          <div className="mt-5">
+            {fonte === "upload" ? (
+              <UploadFoto onSelecionar={aoSelecionarFoto} />
+            ) : (
+              <>
+                <label className="text-sm font-medium text-slate-700">Escolha o terreno medido</label>
+                <select value={terrenoSelecionadoId} onChange={(event) => aoSelecionarTerreno(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:border-primary">
+                  <option value="">Selecionar terreno...</option>
+                  {terrenosSalvos.map((item) => <option key={item.id} value={item.id}>{item.nome ?? item.nome_foto ?? item.id} — {item.area_m2.toFixed(0)} m²</option>)}
+                </select>
+                {terrenoAtual && <p className="mt-2 rounded-lg bg-indigo-50 px-3 py-2 text-xs text-indigo-700">Área: {terrenoAtual.area_m2.toFixed(0)} m² · Perímetro: {terrenoAtual.perimetro_m.toFixed(1)} m. Essas medidas serão enviadas à IA.</p>}
+              </>
             )}
           </div>
+
+          {fotoUrl && <div className="relative mt-5 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={fotoUrl} alt="Foto do terreno" className="h-64 w-full object-cover" onError={() => setErro("Este terreno não tem uma foto disponível.")} />
+            <button type="button" onClick={removerFoto} aria-label="Remover foto" className="absolute right-3 top-3 rounded-full bg-slate-900/80 p-2 text-white hover:bg-red-600"><X size={16} /></button>
+          </div>}
+
+          <div className="mt-5 border-t border-slate-100 pt-5">
+            <p className="text-sm font-medium text-slate-700">Foto de referência de estilo <span className="font-normal text-slate-400">(opcional)</span></p>
+            <p className="mt-1 text-xs text-slate-500">Envie uma casa de referência para inspirar fachada, cores e acabamento.</p>
+            {!referenciaUrl ? <div className="mt-3"><UploadFoto onSelecionar={aoSelecionarReferencia} titulo="Adicionar referência de estilo" ajuda="PNG ou JPG de uma casa pronta" /></div> : <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 p-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={referenciaUrl} alt="Referência de estilo" className="h-16 w-20 rounded-lg object-cover" />
+              <span className="flex-1 text-sm text-slate-600">Referência adicionada</span>
+              <Button variant="secondary" onClick={() => { setReferencia(null); setReferenciaUrl(null); }}>Remover</Button>
+            </div>}
+          </div>
+        </Card>
+
+        <Card className="flex flex-col p-5 sm:p-6">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-primary"><ImagePlus size={20} /></div>
+          <h2 className="mt-4 text-lg font-semibold text-slate-900">Descreva o projeto</h2>
+          <p className="mt-1 text-sm text-slate-500">Informe a construção, acabamentos e ambientes desejados. Quanto mais direto, melhor.</p>
+          <textarea value={descricao} onChange={(event) => setDescricao(event.target.value)} placeholder="Ex.: Casa contemporânea de dois pavimentos, piscina, garagem para dois carros, jardim e fachada em concreto e vidro." className="mt-5 min-h-48 w-full resize-y rounded-xl border border-slate-200 bg-white p-4 text-sm leading-6 outline-none focus:border-primary" />
+          <p className="mt-2 text-xs text-slate-400">A foto do terreno continua sendo a referência principal de posição e proporção.</p>
+          <Button onClick={enviar} disabled={gerando} className="mt-5 w-full">
+            {gerando ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+            {gerando ? "Criando imagem e vídeo..." : "Gerar projeto"}
+          </Button>
+          {status === "processando" && <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">A imagem está sendo criada pela IA. Em seguida, a VPS prepara o vídeo automaticamente.</p>}
+          {erro && <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</p>}
+        </Card>
+      </div>
+
+      {status === "pronto" && jobId && <Card className="mt-6 p-5 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold text-slate-900">Projeto pronto</h2><p className="text-sm text-slate-500">Imagem criada por IA e vídeo de {duracaoTotal}s montado na VPS.</p></div><a href={`${API_URL}/videos-salvos/${jobId}/download`} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-primary-hover"><Download size={16} /> Baixar MP4</a></div>
+        <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={`${API_URL}/gerar-projeto/${jobId}/imagem`} alt="Projeto gerado" className="w-full rounded-xl border border-slate-200" />
+          <video key={duracaoTotal} src={`${API_URL}/gerar-projeto/${jobId}/video?v=${duracaoTotal}`} controls className="w-full rounded-xl border border-slate-200" />
         </div>
-      )}
+        {podeEstender && <Button variant="secondary" onClick={estender} className="mt-5">Estender vídeo (+7s)</Button>}
+      </Card>}
     </div>
   );
 }

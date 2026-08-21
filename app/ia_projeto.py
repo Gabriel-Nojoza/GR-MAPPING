@@ -14,8 +14,11 @@ https://aistudio.google.com/apikey).
 from __future__ import annotations
 
 import os
+import subprocess
+import tempfile
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 from google import genai
 from google.genai import types
@@ -203,6 +206,37 @@ def gerar_video_projeto(
     return video_bytes, video_mime, video
 
 
+def gerar_video_local(imagem_bytes: bytes, imagem_mime: str) -> tuple[bytes, str]:
+    """Cria um vídeo de apresentação local, sem consumir créditos do Veo."""
+    extensao = ".png" if imagem_mime == "image/png" else ".jpg"
+    with tempfile.TemporaryDirectory(prefix="gr-mapping-video-") as diretorio:
+        entrada = Path(diretorio) / f"projeto{extensao}"
+        saida = Path(diretorio) / "projeto.mp4"
+        entrada.write_bytes(imagem_bytes)
+
+        filtro = (
+            "scale=1280:720:force_original_aspect_ratio=increase,"
+            "crop=1280:720,"
+            "zoompan=z='min(zoom+0.0007,1.14)':d=192:s=1280x720:fps=24"
+        )
+        comando = [
+            "ffmpeg", "-y", "-loop", "1", "-i", str(entrada), "-vf", filtro,
+            "-t", str(VIDEO_DURATION_S), "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart", str(saida),
+        ]
+        try:
+            resultado = subprocess.run(comando, capture_output=True, text=True, timeout=90)
+        except FileNotFoundError as erro:
+            raise GeracaoError("FFmpeg não está instalado no servidor.") from erro
+        except subprocess.TimeoutExpired as erro:
+            raise GeracaoError("o vídeo local demorou mais que o esperado para ser criado.") from erro
+
+        if resultado.returncode != 0 or not saida.exists():
+            detalhe = resultado.stderr.strip().splitlines()[-1] if resultado.stderr else "erro desconhecido"
+            raise GeracaoError(f"não consegui montar o vídeo local: {detalhe}")
+        return saida.read_bytes(), "video/mp4"
+
+
 EXTENSAO_INCREMENTO_S = 7
 EXTENSAO_DURACAO_MAXIMA_S = 148
 
@@ -266,7 +300,7 @@ def _aguardar_e_baixar_video(client: genai.Client, operacao, acao: str = "gerar"
 def gerar_projeto(foto_bytes: bytes, foto_mime: str, descricao: str) -> ProjetoGerado:
     """Roda o pipeline completo: foto do terreno -> imagem editada -> vídeo."""
     imagem_bytes, imagem_mime = gerar_imagem_projeto(foto_bytes, foto_mime, descricao)
-    video_bytes, video_mime, _ = gerar_video_projeto(imagem_bytes, imagem_mime, descricao)
+    video_bytes, video_mime = gerar_video_local(imagem_bytes, imagem_mime)
     return ProjetoGerado(
         imagem_bytes=imagem_bytes,
         imagem_mime=imagem_mime,
