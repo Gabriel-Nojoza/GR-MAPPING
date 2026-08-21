@@ -27,3 +27,13 @@ O serviço usa um disco persistente em `/var/data`, que mantém `dados.db` e os 
 1. Abra `https://sua-api.onrender.com/saude`; a resposta deve confirmar que a API está no ar.
 2. Abra a URL do Vercel e faça login.
 3. Envie uma foto de teste e confirme que ela permanece disponível após um novo deploy.
+
+## Publicação em VPS com Docker
+
+Se preferir hospedar tudo em uma VPS, copie `.env.vps.example` para `.env.vps`, preencha o IP público e os segredos, e execute:
+
+```bash
+docker compose --env-file .env.vps -f docker-compose.vps.yml up -d --build
+```
+
+Por padrão, a interface ficará em `http://IP_DA_VPS:3001` e a API em `http://IP_DA_VPS:8001`. Antes de executar, confirme que essas portas não são usadas pelo outro projeto e abra-as no firewall da VPS.

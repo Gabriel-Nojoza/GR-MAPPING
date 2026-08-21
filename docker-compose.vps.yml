@@ -1,0 +1,32 @@
+name: gr-mapping
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-8001}:8000"
+    env_file:
+      - .env.vps
+    environment:
+      MEDICAO_DB_PATH: /data/dados.db
+      MEDICAO_UPLOADS_DIR: /data/uploads
+    volumes:
+      - gr_mapping_data:/data
+
+  front:
+    build:
+      context: ./front
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    restart: unless-stopped
+    ports:
+      - "${FRONT_PORT:-3001}:3000"
+    depends_on:
+      - api
+
+volumes:
+  gr_mapping_data:

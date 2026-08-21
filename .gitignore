@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 .env
+.env.vps
 scripts/projeto_gerado.*
 dados.db
 uploads/
