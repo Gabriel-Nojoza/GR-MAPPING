@@ -40,7 +40,8 @@ def init_db() -> None:
                 area_m2 REAL NOT NULL,
                 area_ha REAL NOT NULL,
                 perimetro_m REAL NOT NULL,
-                gsd_cm_por_px REAL NOT NULL
+                gsd_cm_por_px REAL NOT NULL,
+                pontos_json TEXT
             )
         """)
         conn.execute("""
@@ -57,6 +58,8 @@ def init_db() -> None:
         colunas = {r["name"] for r in conn.execute("PRAGMA table_info(terrenos)")}
         if "nome" not in colunas:
             conn.execute("ALTER TABLE terrenos ADD COLUMN nome TEXT")
+        if "pontos_json" not in colunas:
+            conn.execute("ALTER TABLE terrenos ADD COLUMN pontos_json TEXT")
 
         # migração leve: agrupamento de jobs que fazem parte da mesma
         # "evolução da obra" (várias etapas geradas a partir de uma descrição)
@@ -72,12 +75,13 @@ def _agora() -> str:
 
 
 def salvar_terreno(id_: str, nome_foto: str | None, area_m2: float, area_ha: float,
-                    perimetro_m: float, gsd_cm_por_px: float, nome: str | None = None) -> None:
+                    perimetro_m: float, gsd_cm_por_px: float, nome: str | None = None,
+                    pontos_json: str | None = None) -> None:
     with _conectar() as conn:
         conn.execute(
             "INSERT INTO terrenos (id, criado_em, nome_foto, area_m2, area_ha, "
-            "perimetro_m, gsd_cm_por_px, nome) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (id_, _agora(), nome_foto, area_m2, area_ha, perimetro_m, gsd_cm_por_px, nome),
+            "perimetro_m, gsd_cm_por_px, nome, pontos_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (id_, _agora(), nome_foto, area_m2, area_ha, perimetro_m, gsd_cm_por_px, nome, pontos_json),
         )
 
 

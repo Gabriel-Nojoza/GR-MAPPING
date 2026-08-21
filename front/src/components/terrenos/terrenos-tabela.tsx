@@ -3,20 +3,19 @@
 import { useState } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import type { Terreno } from "@/types/terreno";
-import { API_URL, renomearTerreno, excluirTerreno } from "@/lib/api";
+import { renomearTerreno, excluirTerreno } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { TerrenoFotoMarcada } from "./terreno-foto-marcada";
 
 export function TerrenosTabela({ terrenosIniciais }: { terrenosIniciais: Terreno[] }) {
   const [terrenos, setTerrenos] = useState(terrenosIniciais);
   const [editando, setEditando] = useState<Terreno | null>(null);
   const [nomeEditado, setNomeEditado] = useState("");
-  const [fotoComErro, setFotoComErro] = useState(false);
 
   function iniciarEdicao(t: Terreno) {
     setEditando(t);
     setNomeEditado(t.nome ?? t.nome_foto ?? "");
-    setFotoComErro(false);
   }
 
   async function salvarEdicao() {
@@ -95,20 +94,7 @@ export function TerrenosTabela({ terrenosIniciais }: { terrenosIniciais: Terreno
           >
             <h3 className="text-sm font-medium text-slate-500">Editar terreno</h3>
 
-            {!fotoComErro && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={`${API_URL}/terrenos/${editando.id}/foto`}
-                alt="Foto do terreno"
-                className="mt-3 max-h-72 w-full rounded-xl border border-slate-200 object-contain"
-                onError={() => setFotoComErro(true)}
-              />
-            )}
-            {fotoComErro && (
-              <p className="mt-3 rounded-xl border border-dashed border-slate-200 py-6 text-center text-xs text-slate-400">
-                Sem foto salva pra este terreno (medido antes desse recurso existir).
-              </p>
-            )}
+            <TerrenoFotoMarcada terreno={editando} />
 
             <label className="mt-4 block text-xs font-medium text-slate-500">
               Nome / local do terreno
@@ -132,4 +118,3 @@ export function TerrenosTabela({ terrenosIniciais }: { terrenosIniciais: Terreno
     </>
   );
 }
-

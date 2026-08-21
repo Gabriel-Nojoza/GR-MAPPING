@@ -189,6 +189,7 @@ class Terreno(BaseModel):
     area_ha: float
     perimetro_m: float
     gsd_cm_por_px: float
+    pontos: list[list[float]] = []
 
 
 class JobResumo(BaseModel):
@@ -298,7 +299,7 @@ def medir(
 
     db.salvar_terreno(
         id_, foto.filename, r.area_m2, r.area_ha, r.perimeter_m,
-        round(g.gsd_cm_per_px, 2), nome=nome,
+        round(g.gsd_cm_per_px, 2), nome=nome, pontos_json=json.dumps(pontos_px),
     )
 
     return Medicao(
@@ -360,7 +361,7 @@ def medir_manual(
 
     db.salvar_terreno(
         id_, foto.filename, r.area_m2, r.area_ha, r.perimeter_m,
-        round(gsd_m_per_px * 100, 2), nome=nome,
+        round(gsd_m_per_px * 100, 2), nome=nome, pontos_json=json.dumps(pontos_px),
     )
 
     return Medicao(
@@ -436,7 +437,7 @@ def medir_altura(
 
     db.salvar_terreno(
         id_, foto.filename, r.area_m2, r.area_ha, r.perimeter_m,
-        round(gsd_m_per_px * 100, 2), nome=nome,
+        round(gsd_m_per_px * 100, 2), nome=nome, pontos_json=json.dumps(pontos_px),
     )
 
     aviso_fov = (
@@ -715,9 +716,18 @@ def status_evolucao(grupo_id: str):
 # ----------------------------------------------------------------------
 # listagens — pras páginas de Terrenos e Visualizações do front
 # ----------------------------------------------------------------------
+def _resposta_terreno(linha) -> Terreno:
+    dados = dict(linha)
+    try:
+        dados["pontos"] = json.loads(dados.pop("pontos_json", None) or "[]")
+    except json.JSONDecodeError:
+        dados["pontos"] = []
+    return Terreno(**dados)
+
+
 @app.get("/terrenos", response_model=list[Terreno])
 def terrenos():
-    return [Terreno(**dict(t)) for t in db.listar_terrenos()]
+    return [_resposta_terreno(t) for t in db.listar_terrenos()]
 
 
 @app.get("/videos", response_model=list[JobResumo])
@@ -730,7 +740,7 @@ def editar_terreno(terreno_id: str, dados: TerrenoUpdate):
     if not db.renomear_terreno(terreno_id, dados.nome):
         raise HTTPException(status_code=404, detail="terreno não encontrado")
     linha = next((t for t in db.listar_terrenos(1000) if t["id"] == terreno_id), None)
-    return Terreno(**dict(linha))
+    return _resposta_terreno(linha)
 
 @app.delete("/terrenos/{terreno_id}")
 def apagar_terreno(terreno_id: str):

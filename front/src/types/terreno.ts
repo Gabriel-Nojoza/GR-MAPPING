@@ -7,4 +7,5 @@ export interface Terreno {
   area_ha: number;
   perimetro_m: number;
   gsd_cm_por_px: number;
+  pontos: [number, number][];
 }
