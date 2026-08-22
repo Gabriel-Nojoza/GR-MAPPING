@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Gauge, Plane, Ruler } from "lucide-react";
+import { Gauge, Plane, Ruler, X } from "lucide-react";
 import { UploadFoto } from "@/components/medir/upload-foto";
 import { CanvasPoligono } from "@/components/medir/canvas-poligono";
 import { ResultadoMedicao } from "@/components/medir/resultado-medicao";
@@ -69,6 +69,22 @@ export default function MedirTerreno() {
   function limparPontos() {
     setPontos([]);
     setReferenciaPontos([]);
+  }
+
+  function removerFoto() {
+    if (fotoUrl?.startsWith("blob:")) URL.revokeObjectURL(fotoUrl);
+    setFoto(null);
+    setFotoUrl(null);
+    setAnalise(null);
+    setPontos([]);
+    setMedicao(null);
+    setErro(null);
+    setNomeTerreno("");
+    setModo("auto");
+    setAlturaVoo("");
+    setFov("");
+    setReferenciaPontos([]);
+    setDistanciaReferencia("");
   }
 
   async function calcularArea() {
@@ -227,12 +243,17 @@ export default function MedirTerreno() {
       {fotoUrl && (
         <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-3">
           <div className="lg:col-span-2">
-            <CanvasPoligono
-              imagemUrl={fotoUrl}
-              pontos={pontos}
-              pontosReferencia={referenciaPontos}
-              onAdicionarPonto={aoClicarCanvas}
-            />
+            <div className="relative">
+              <CanvasPoligono
+                imagemUrl={fotoUrl}
+                pontos={pontos}
+                pontosReferencia={referenciaPontos}
+                onAdicionarPonto={aoClicarCanvas}
+              />
+              <button type="button" onClick={removerFoto} aria-label="Remover foto e escolher outra" title="Remover foto e escolher outra" className="absolute right-3 top-3 rounded-full bg-slate-950/80 p-2 text-white shadow-sm transition-colors hover:bg-red-600">
+                <X size={18} />
+              </button>
+            </div>
             <p className="mt-3 rounded-lg bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-800">
               Para registrar frente, fundo e laterais, marque exatamente 4 pontos no sentido horário:
               P1→P2 é a frente, P2→P3 a lateral direita, P3→P4 o fundo e P4→P1 a lateral esquerda.
