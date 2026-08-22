@@ -17,6 +17,7 @@ export default function GerarProjeto() {
   const [terrenoSelecionadoId, setTerrenoSelecionadoId] = useState("");
   const [foto, setFoto] = useState<File | null>(null);
   const [fotoUrl, setFotoUrl] = useState<string | null>(null);
+  const [fotosAdicionais, setFotosAdicionais] = useState<File[]>([]);
   const [referencia, setReferencia] = useState<File | null>(null);
   const [referenciaUrl, setReferenciaUrl] = useState<string | null>(null);
   const [descricao, setDescricao] = useState(() =>
@@ -61,6 +62,7 @@ export default function GerarProjeto() {
     setFonte(nova);
     setFoto(null);
     setFotoUrl(null);
+    setFotosAdicionais([]);
     setTerrenoSelecionadoId("");
     setErro(null);
   }
@@ -85,6 +87,14 @@ export default function GerarProjeto() {
   function aoSelecionarReferencia(arquivo: File) {
     setReferencia(arquivo);
     setReferenciaUrl(URL.createObjectURL(arquivo));
+  }
+
+  function adicionarFotoTerreno(arquivo: File) {
+    setFotosAdicionais((atuais) => [...atuais, arquivo].slice(0, 3));
+  }
+
+  function removerFotoAdicional(indice: number) {
+    setFotosAdicionais((atuais) => atuais.filter((_, atual) => atual !== indice));
   }
 
   async function obterArquivo(): Promise<File | null> {
@@ -126,7 +136,12 @@ export default function GerarProjeto() {
     setDuracaoTotal(0);
     setPodeEstender(false);
     try {
-      const inicial = await gerarProjeto(arquivo, montarDescricaoFinal(), referencia ?? undefined);
+      const inicial = await gerarProjeto(
+        arquivo,
+        montarDescricaoFinal(),
+        referencia ?? undefined,
+        fotosAdicionais,
+      );
       setJobId(inicial.job_id);
       pollar(inicial.job_id);
     } catch (causa) {
@@ -190,6 +205,19 @@ export default function GerarProjeto() {
             <img src={fotoUrl} alt="Foto do terreno" className="h-64 w-full object-cover" onError={() => setErro("Este terreno não tem uma foto disponível.")} />
             <button type="button" onClick={removerFoto} aria-label="Remover foto" className="absolute right-3 top-3 rounded-full bg-slate-900/80 p-2 text-white hover:bg-red-600"><X size={16} /></button>
           </div>}
+
+          <div className="mt-5 border-t border-slate-100 pt-5">
+            <p className="text-sm font-medium text-slate-700">Mais fotos do terreno <span className="font-normal text-slate-400">(opcional)</span></p>
+            <p className="mt-1 text-xs text-slate-500">Adicione até 3 ângulos extras da rua, laterais ou fundo. A IA usará todas para entender melhor o lote.</p>
+            {fotosAdicionais.length > 0 && <div className="mt-3 grid grid-cols-3 gap-3">
+              {fotosAdicionais.map((arquivo, indice) => <div key={`${arquivo.name}-${indice}`} className="relative overflow-hidden rounded-lg border border-slate-200">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={URL.createObjectURL(arquivo)} alt={`Foto adicional ${indice + 1}`} className="h-20 w-full object-cover" />
+                <button type="button" onClick={() => removerFotoAdicional(indice)} aria-label={`Remover foto adicional ${indice + 1}`} className="absolute right-1 top-1 rounded-full bg-slate-900/80 p-1 text-white hover:bg-red-600"><X size={13} /></button>
+              </div>)}
+            </div>}
+            {fotosAdicionais.length < 3 && <div className="mt-3"><UploadFoto onSelecionar={adicionarFotoTerreno} titulo={`Adicionar foto do terreno (${fotosAdicionais.length}/3)`} ajuda="Foto da rua, lateral ou fundo do mesmo lote" /></div>}
+          </div>
 
           <div className="mt-5 border-t border-slate-100 pt-5">
             <p className="text-sm font-medium text-slate-700">Foto de referência de estilo <span className="font-normal text-slate-400">(opcional)</span></p>

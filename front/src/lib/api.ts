@@ -131,11 +131,13 @@ export async function gerarProjeto(
   foto: File,
   descricao: string,
   referencia?: File,
+  fotosAdicionais: File[] = [],
 ): Promise<ProjetoStatus> {
   const formData = new FormData();
   formData.append("foto", foto);
   formData.append("descricao", descricao);
   if (referencia) formData.append("referencia", referencia);
+  fotosAdicionais.forEach((arquivo) => formData.append("fotos_adicionais", arquivo));
 
   const res = await fetch(`${API_URL}/gerar-projeto`, {
     method: "POST",

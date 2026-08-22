@@ -475,11 +475,12 @@ def _status_do_job(job: Job) -> ProjetoStatus:
 
 
 def _rodar_geracao(job: Job, foto_bytes: bytes, foto_mime: str, descricao: str,
-                    referencia_bytes: bytes | None = None, referencia_mime: str | None = None):
+                    referencia_bytes: bytes | None = None, referencia_mime: str | None = None,
+                    fotos_adicionais: list[tuple[bytes, str]] | None = None):
     try:
         job.descricao = descricao
         imagem_bytes, imagem_mime = gerar_imagem_projeto(
-            foto_bytes, foto_mime, descricao, referencia_bytes, referencia_mime
+            foto_bytes, foto_mime, descricao, referencia_bytes, referencia_mime, fotos_adicionais
         )
         job.imagem_bytes, job.imagem_mime = imagem_bytes, imagem_mime
         _salvar_arquivo_projeto(job.id, "imagem", imagem_bytes, imagem_mime)
@@ -528,6 +529,9 @@ def gerar_projeto(
     referencia: UploadFile | None = File(
         None, description="Foto opcional de uma casa pronta, usada como referência de estilo"
     ),
+    fotos_adicionais: list[UploadFile] = File(
+        [], description="Até três fotos extras do mesmo terreno, por outros ângulos"
+    ),
 ):
     """
     Recebe a foto do terreno + a descrição do projeto e começa a geração
@@ -542,12 +546,17 @@ def gerar_projeto(
 
     referencia_bytes = referencia.file.read() if referencia else None
     referencia_mime = referencia.content_type if referencia else None
+    extras = [
+        (arquivo.file.read(), arquivo.content_type or "image/jpeg")
+        for arquivo in fotos_adicionais[:3]
+    ]
+    extras = [(bytes_foto, mime_foto) for bytes_foto, mime_foto in extras if bytes_foto]
 
     job = criar_job()
     db.registrar_job(job.id, descricao)
     background_tasks.add_task(
         _rodar_geracao, job, foto_bytes, foto.content_type or "image/jpeg", descricao,
-        referencia_bytes, referencia_mime,
+        referencia_bytes, referencia_mime, extras,
     )
     return _status_do_job(job)
 

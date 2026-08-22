@@ -133,6 +133,7 @@ def gerar_imagem_projeto(
     descricao: str,
     referencia_bytes: bytes | None = None,
     referencia_mime: str | None = None,
+    fotos_adicionais: list[tuple[bytes, str]] | None = None,
 ) -> tuple[bytes, str]:
     """
     Etapa A: edita a foto do terreno pra mostrar o projeto construído.
@@ -143,19 +144,21 @@ def gerar_imagem_projeto(
     """
     client = _client()
 
+    fotos_terreno = [(foto_bytes, foto_mime), *(fotos_adicionais or [])]
+    contents = [
+        types.Part.from_bytes(data=bytes_foto, mime_type=mime_foto)
+        for bytes_foto, mime_foto in fotos_terreno
+    ]
+    prompt = _PROMPT_IMAGEM.format(descricao=descricao)
+    if len(fotos_terreno) > 1:
+        prompt += (
+            f" As primeiras {len(fotos_terreno)} imagens mostram o mesmo terreno por ângulos diferentes. "
+            "Use todas para compreender fielmente limites, rua, vizinhos e posição da construção."
+        )
     if referencia_bytes and referencia_mime:
-        prompt = _PROMPT_IMAGEM_COM_REFERENCIA.format(descricao=descricao) + "\n\n" + _INSTRUCAO_CAMERA_FRONTAL
-        contents = [
-            types.Part.from_bytes(data=foto_bytes, mime_type=foto_mime),
-            types.Part.from_bytes(data=referencia_bytes, mime_type=referencia_mime),
-            prompt,
-        ]
-    else:
-        prompt = _PROMPT_IMAGEM.format(descricao=descricao) + "\n\n" + _INSTRUCAO_CAMERA_FRONTAL
-        contents = [
-            types.Part.from_bytes(data=foto_bytes, mime_type=foto_mime),
-            prompt,
-        ]
+        contents.append(types.Part.from_bytes(data=referencia_bytes, mime_type=referencia_mime))
+        prompt += " A última imagem é referência apenas de estilo, fachada e acabamento; não é outro terreno."
+    contents.append(prompt + "\n\n" + _INSTRUCAO_CAMERA_FRONTAL)
 
     resposta = client.models.generate_content(
         model=IMAGE_MODEL,
