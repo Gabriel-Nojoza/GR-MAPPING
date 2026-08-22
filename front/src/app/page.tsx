@@ -4,7 +4,6 @@ import { StatCard } from "@/components/dashboard/stat-card";
 import { AtividadesPizza } from "@/components/dashboard/atividades-pizza";
 import { MedicoesBarras } from "@/components/dashboard/medicoes-barras";
 import { CalendarioCaptacoes } from "@/components/dashboard/calendario-captacoes";
-import { AtividadesLista } from "@/components/dashboard/atividades-lista";
 import { FinanceiroBarras } from "@/components/dashboard/financeiro-barras";
 
 export default async function Home() {
@@ -15,6 +14,6 @@ export default async function Home() {
     <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4"><StatCard icon={<Ruler size={18} />} label="Terrenos medidos" value={painel.total_terrenos} /><StatCard icon={<Map size={18} />} label="Área total (ha)" value={painel.area_total_ha} /><StatCard icon={<Video size={18} />} label="Vídeos gerados" value={painel.total_videos} /><StatCard icon={<Users size={18} />} label="Clientes cadastrados" value={painel.total_clientes} /></div>
     <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4"><StatCard icon={<Wallet size={18} />} label="Saldo do mês" value={moeda.format(painel.receitas_pagas_mes - painel.despesas_pagas_mes)} /><StatCard icon={<Banknote size={18} />} label="Recebido no mês" value={moeda.format(painel.receitas_pagas_mes)} /><StatCard icon={<Clock size={18} />} label="A receber" value={moeda.format(painel.a_receber_mes)} /><StatCard icon={<Clock size={18} />} label="Vídeos processando" value={painel.videos_processando} /></div>
     <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2"><MedicoesBarras medicoesPorDia={painel.medicoes_por_dia} /><FinanceiroBarras receitas={painel.receitas_pagas_mes} despesas={painel.despesas_pagas_mes} receber={painel.a_receber_mes} pagar={painel.a_pagar_mes} /></div>
-    <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[1.25fr_0.75fr]"><AtividadesPizza totalTerrenos={painel.total_terrenos} totalVideos={painel.total_videos} /><AtividadesLista atividades={painel.atividades} /></div><div className="mt-5"><CalendarioCaptacoes /></div>
+    <div className="mt-5"><AtividadesPizza totalTerrenos={painel.total_terrenos} totalVideos={painel.total_videos} /></div><div className="mt-5"><CalendarioCaptacoes /></div>
   </div>;
 }
