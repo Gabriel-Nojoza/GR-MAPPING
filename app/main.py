@@ -22,6 +22,7 @@ import mimetypes
 import os
 import tempfile
 import uuid
+from datetime import date
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -203,6 +204,19 @@ class JobResumo(BaseModel):
 
 class TerrenoUpdate(BaseModel):
     nome: str | None = None
+
+
+class LancamentoDados(BaseModel):
+    tipo: str
+    descricao: str
+    categoria: str
+    valor_centavos: int
+    vencimento: str
+    observacao: str | None = None
+
+
+class LancamentoStatus(BaseModel):
+    status: str
 
 
 
@@ -786,3 +800,61 @@ def painel_resumo():
         medicoes_por_dia=r["medicoes_por_dia"],
         atividades=[Atividade(**a) for a in db.atividades_recentes()],
     )
+
+
+# ----------------------------------------------------------------------
+# financeiro
+# ----------------------------------------------------------------------
+def _lancamento_resposta(linha) -> dict:
+    dados = dict(linha)
+    dados["valor"] = dados.pop("valor_centavos") / 100
+    if dados["status"] == "pendente" and dados["vencimento"] < date.today().isoformat():
+        dados["status"] = "atrasado"
+    return dados
+
+
+@app.get("/financeiro")
+def listar_financeiro(mes: str | None = None):
+    return [_lancamento_resposta(linha) for linha in db.listar_lancamentos(mes)]
+
+
+@app.get("/financeiro/resumo")
+def resumo_financeiro(mes: str | None = None):
+    linhas = [_lancamento_resposta(linha) for linha in db.listar_lancamentos(mes)]
+    receitas_pagas = sum(item["valor"] for item in linhas if item["tipo"] == "receita" and item["status"] == "pago")
+    despesas_pagas = sum(item["valor"] for item in linhas if item["tipo"] == "despesa" and item["status"] == "pago")
+    receber = sum(item["valor"] for item in linhas if item["tipo"] == "receita" and item["status"] != "pago")
+    pagar = sum(item["valor"] for item in linhas if item["tipo"] == "despesa" and item["status"] != "pago")
+    atrasados = sum(item["valor"] for item in linhas if item["status"] == "atrasado")
+    return {"receitas_pagas": receitas_pagas, "despesas_pagas": despesas_pagas, "saldo": receitas_pagas - despesas_pagas, "a_receber": receber, "a_pagar": pagar, "atrasados": atrasados}
+
+
+@app.post("/financeiro")
+def criar_financeiro(dados: LancamentoDados):
+    if dados.tipo not in {"receita", "despesa"}:
+        raise HTTPException(status_code=400, detail="tipo deve ser receita ou despesa")
+    if not dados.descricao.strip() or not dados.categoria.strip() or dados.valor_centavos <= 0:
+        raise HTTPException(status_code=400, detail="preencha descrição, categoria e um valor maior que zero")
+    try:
+        date.fromisoformat(dados.vencimento)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="vencimento deve estar no formato AAAA-MM-DD")
+    identificador = uuid.uuid4().hex
+    db.criar_lancamento(identificador, dados.tipo, dados.descricao.strip(), dados.categoria.strip(), dados.valor_centavos, dados.vencimento, dados.observacao)
+    return _lancamento_resposta(next(item for item in db.listar_lancamentos() if item["id"] == identificador))
+
+
+@app.patch("/financeiro/{lancamento_id}/status")
+def atualizar_financeiro(lancamento_id: str, dados: LancamentoStatus):
+    if dados.status not in {"pendente", "pago"}:
+        raise HTTPException(status_code=400, detail="status deve ser pendente ou pago")
+    if not db.atualizar_status_lancamento(lancamento_id, dados.status, date.today().isoformat() if dados.status == "pago" else None):
+        raise HTTPException(status_code=404, detail="lançamento não encontrado")
+    return {"ok": True}
+
+
+@app.delete("/financeiro/{lancamento_id}")
+def excluir_financeiro(lancamento_id: str):
+    if not db.excluir_lancamento(lancamento_id):
+        raise HTTPException(status_code=404, detail="lançamento não encontrado")
+    return {"ok": True}

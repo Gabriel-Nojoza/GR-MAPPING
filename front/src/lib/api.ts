@@ -228,3 +228,21 @@ export async function excluirTerreno(id: string): Promise<void> {
     throw new Error(`Falha ao excluir: ${res.status}`);
   }
 }
+
+export type LancamentoFinanceiro = {
+  id: string; tipo: "receita" | "despesa"; descricao: string; categoria: string;
+  valor: number; vencimento: string; status: "pendente" | "pago" | "atrasado"; observacao?: string | null;
+};
+
+export type ResumoFinanceiro = { receitas_pagas: number; despesas_pagas: number; saldo: number; a_receber: number; a_pagar: number; atrasados: number };
+
+async function financeiroResposta(res: Response) {
+  if (!res.ok) { const erro = await res.json().catch(() => null); throw new Error(erro?.detail ?? "Erro financeiro"); }
+  return res.json();
+}
+
+export async function getFinanceiro(mes: string) { return financeiroResposta(await fetch(`${API_URL}/financeiro?mes=${mes}`, { cache: "no-store" })) as Promise<LancamentoFinanceiro[]>; }
+export async function getResumoFinanceiro(mes: string) { return financeiroResposta(await fetch(`${API_URL}/financeiro/resumo?mes=${mes}`, { cache: "no-store" })) as Promise<ResumoFinanceiro>; }
+export async function criarLancamento(dados: { tipo: "receita" | "despesa"; descricao: string; categoria: string; valor_centavos: number; vencimento: string; observacao?: string }) { return financeiroResposta(await fetch(`${API_URL}/financeiro`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dados) })); }
+export async function marcarLancamento(id: string, status: "pendente" | "pago") { return financeiroResposta(await fetch(`${API_URL}/financeiro/${id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) })); }
+export async function excluirLancamento(id: string) { return financeiroResposta(await fetch(`${API_URL}/financeiro/${id}`, { method: "DELETE" })); }

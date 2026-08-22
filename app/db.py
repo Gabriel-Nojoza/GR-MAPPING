@@ -54,6 +54,20 @@ def init_db() -> None:
                 erro TEXT
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS lancamentos_financeiros (
+                id TEXT PRIMARY KEY,
+                criado_em TEXT NOT NULL,
+                tipo TEXT NOT NULL,
+                descricao TEXT NOT NULL,
+                categoria TEXT NOT NULL,
+                valor_centavos INTEGER NOT NULL,
+                vencimento TEXT NOT NULL,
+                status TEXT NOT NULL,
+                pago_em TEXT,
+                observacao TEXT
+            )
+        """)
         # migração leve: adiciona a coluna "nome" se o banco já existia sem ela
         colunas = {r["name"] for r in conn.execute("PRAGMA table_info(terrenos)")}
         if "nome" not in colunas:
@@ -195,4 +209,41 @@ def excluir_terreno(id_: str) -> bool:
     """Remove o terreno. Devolve False se o id não existir."""
     with _conectar() as conn:
         cur = conn.execute("DELETE FROM terrenos WHERE id = ?", (id_,))
+        return cur.rowcount > 0
+
+
+def criar_lancamento(id_: str, tipo: str, descricao: str, categoria: str,
+                     valor_centavos: int, vencimento: str, observacao: str | None) -> None:
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO lancamentos_financeiros "
+            "(id, criado_em, tipo, descricao, categoria, valor_centavos, vencimento, status, pago_em, observacao) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 'pendente', NULL, ?)",
+            (id_, _agora(), tipo, descricao, categoria, valor_centavos, vencimento, observacao),
+        )
+
+
+def listar_lancamentos(mes: str | None = None) -> list[sqlite3.Row]:
+    consulta = "SELECT * FROM lancamentos_financeiros"
+    parametros: tuple = ()
+    if mes:
+        consulta += " WHERE substr(vencimento, 1, 7) = ?"
+        parametros = (mes,)
+    consulta += " ORDER BY vencimento ASC, criado_em DESC"
+    with _conectar() as conn:
+        return conn.execute(consulta, parametros).fetchall()
+
+
+def atualizar_status_lancamento(id_: str, status: str, pago_em: str | None) -> bool:
+    with _conectar() as conn:
+        cur = conn.execute(
+            "UPDATE lancamentos_financeiros SET status = ?, pago_em = ? WHERE id = ?",
+            (status, pago_em, id_),
+        )
+        return cur.rowcount > 0
+
+
+def excluir_lancamento(id_: str) -> bool:
+    with _conectar() as conn:
+        cur = conn.execute("DELETE FROM lancamentos_financeiros WHERE id = ?", (id_,))
         return cur.rowcount > 0

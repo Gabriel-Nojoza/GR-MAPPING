@@ -8,6 +8,7 @@ import {
   Map,
   Video,
   Users,
+  WalletCards,
   Sparkles,
   Settings,
   LogOut,
@@ -26,6 +27,7 @@ const ITEMS = [
   { href: "/terrenos", icon: Map, label: "Terrenos" },
   { href: "/videos", icon: Video, label: "Vídeos salvos" },
   { href: "/clientes", icon: Users, label: "Clientes" },
+  { href: "/financeiro", icon: WalletCards, label: "Financeiro" },
   { href: "/gerar-projeto", icon: Sparkles, label: "Gerar Projeto IA" },
   { href: "/configuracoes", icon: Settings, label: "Configurações" },
 ] as const;
