@@ -68,6 +68,15 @@ def init_db() -> None:
                 observacao TEXT
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS clientes (
+                id TEXT PRIMARY KEY,
+                criado_em TEXT NOT NULL,
+                nome TEXT NOT NULL,
+                contato TEXT,
+                email TEXT
+            )
+        """)
         # migração leve: adiciona a coluna "nome" se o banco já existia sem ela
         colunas = {r["name"] for r in conn.execute("PRAGMA table_info(terrenos)")}
         if "nome" not in colunas:
@@ -246,4 +255,27 @@ def atualizar_status_lancamento(id_: str, status: str, pago_em: str | None) -> b
 def excluir_lancamento(id_: str) -> bool:
     with _conectar() as conn:
         cur = conn.execute("DELETE FROM lancamentos_financeiros WHERE id = ?", (id_,))
+        return cur.rowcount > 0
+
+
+def criar_cliente(id_: str, nome: str, contato: str | None, email: str | None) -> None:
+    with _conectar() as conn:
+        conn.execute("INSERT INTO clientes (id, criado_em, nome, contato, email) VALUES (?, ?, ?, ?, ?)",
+                     (id_, _agora(), nome, contato, email))
+
+
+def listar_clientes(busca: str | None = None) -> list[sqlite3.Row]:
+    consulta, parametros = "SELECT * FROM clientes", ()
+    if busca:
+        termo = f"%{busca.strip()}%"
+        consulta += " WHERE nome LIKE ? OR contato LIKE ? OR email LIKE ?"
+        parametros = (termo, termo, termo)
+    consulta += " ORDER BY nome COLLATE NOCASE ASC"
+    with _conectar() as conn:
+        return conn.execute(consulta, parametros).fetchall()
+
+
+def excluir_cliente(id_: str) -> bool:
+    with _conectar() as conn:
+        cur = conn.execute("DELETE FROM clientes WHERE id = ?", (id_,))
         return cur.rowcount > 0

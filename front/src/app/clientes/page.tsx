@@ -1,79 +1,26 @@
 "use client";
 
-import { useState } from "react";
-import { Card } from "@/components/ui/card";
+import { useEffect, useMemo, useState } from "react";
+import { Mail, Phone, Plus, Search, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-interface Cliente {
-  nome: string;
-  contato: string;
-}
+import { Card } from "@/components/ui/card";
+import { criarCliente, excluirCliente, getClientes, type Cliente } from "@/lib/api";
 
 export default function Clientes() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [nome, setNome] = useState("");
-  const [contato, setContato] = useState("");
+  const [busca, setBusca] = useState("");
+  const [form, setForm] = useState({ nome: "", contato: "", email: "" });
+  const [erro, setErro] = useState("");
 
-  function adicionar() {
-    if (!nome.trim()) return;
-    setClientes((atual) => [...atual, { nome, contato }]);
-    setNome("");
-    setContato("");
-  }
+  async function carregar() { try { setClientes(await getClientes()); } catch (causa) { setErro(causa instanceof Error ? causa.message : "Não foi possível carregar clientes."); } }
+  useEffect(() => { carregar(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const filtrados = useMemo(() => { const termo = busca.toLowerCase(); return clientes.filter((cliente) => [cliente.nome, cliente.contato, cliente.email].some((valor) => valor?.toLowerCase().includes(termo))); }, [busca, clientes]);
+  async function adicionar() { if (!form.nome.trim()) { setErro("Informe o nome do cliente."); return; } try { await criarCliente(form); setForm({ nome: "", contato: "", email: "" }); setErro(""); carregar(); } catch (causa) { setErro(causa instanceof Error ? causa.message : "Não foi possível cadastrar."); } }
+  async function apagar(id: string) { if (window.confirm("Excluir este cliente?")) { await excluirCliente(id); carregar(); } }
 
-  return (
-    <div>
-      <h1 className="text-2xl font-semibold text-slate-900">Clientes</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        Ainda não existe um backend pra clientes — essa lista fica só na memória do navegador
-        (some ao recarregar a página).
-      </p>
-
-      <Card className="mt-6 flex flex-wrap items-end gap-3">
-        <div>
-          <label className="block text-xs font-medium text-slate-500">Nome</label>
-          <input
-            value={nome}
-            onChange={(e) => setNome(e.target.value)}
-            className="mt-1 rounded-lg border border-slate-200 bg-white p-2 text-sm focus:border-primary focus:outline-none"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-500">Contato</label>
-          <input
-            value={contato}
-            onChange={(e) => setContato(e.target.value)}
-            className="mt-1 rounded-lg border border-slate-200 bg-white p-2 text-sm focus:border-primary focus:outline-none"
-          />
-        </div>
-        <Button onClick={adicionar}>Adicionar</Button>
-      </Card>
-
-      <Card className="mt-5 overflow-x-auto p-0">
-        <table className="w-full text-left text-sm">
-          <thead>
-            <tr className="border-b border-slate-100 text-xs font-medium text-slate-400">
-              <th className="px-5 py-3">Nome</th>
-              <th className="px-5 py-3">Contato</th>
-            </tr>
-          </thead>
-          <tbody>
-            {clientes.length === 0 && (
-              <tr>
-                <td colSpan={2} className="px-5 py-8 text-center text-slate-400">
-                  Nenhum cliente cadastrado ainda.
-                </td>
-              </tr>
-            )}
-            {clientes.map((c, i) => (
-              <tr key={i} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
-                <td className="px-5 py-3 text-slate-700">{c.nome}</td>
-                <td className="px-5 py-3 text-slate-500">{c.contato || "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
-    </div>
-  );
+  return <div className="mx-auto max-w-6xl">
+    <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-medium text-primary">Relacionamento</p><h1 className="mt-1 text-2xl font-semibold text-slate-900">Clientes</h1><p className="mt-1 text-sm text-slate-500">Cadastre e encontre rapidamente seus clientes.</p></div><div className="flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-2 text-sm font-medium text-primary"><Users size={16} /> {clientes.length} cliente{clientes.length === 1 ? "" : "s"}</div></div>
+    <Card className="mt-6 p-5"><div className="flex items-center gap-2"><div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-50 text-primary"><Plus size={18} /></div><div><h2 className="font-semibold text-slate-800">Novo cliente</h2><p className="text-xs text-slate-500">Adicione os dados principais para consulta futura.</p></div></div><div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1.2fr_1fr_1fr_auto]"><input value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} placeholder="Nome completo" className="rounded-lg border border-slate-200 p-2.5 text-sm" /><input value={form.contato} onChange={(e) => setForm({ ...form, contato: e.target.value })} placeholder="Telefone / WhatsApp" className="rounded-lg border border-slate-200 p-2.5 text-sm" /><input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="E-mail" className="rounded-lg border border-slate-200 p-2.5 text-sm" /><Button onClick={adicionar}><Plus size={16} /> Adicionar</Button></div></Card>
+    <Card className="mt-5 overflow-hidden p-0"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-4"><div><h2 className="font-semibold text-slate-800">Lista de clientes</h2><p className="text-xs text-slate-500">{filtrados.length} resultado{filtrados.length === 1 ? "" : "s"}</p></div><label className="relative block"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Pesquisar nome, telefone ou e-mail" className="w-72 max-w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none focus:border-primary" /></label></div><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b border-slate-100 text-xs font-medium text-slate-400"><th className="px-5 py-3">Cliente</th><th className="px-5 py-3">Contato</th><th className="px-5 py-3">Cadastro</th><th className="px-5 py-3" /></tr></thead><tbody>{filtrados.length === 0 ? <tr><td colSpan={4} className="px-5 py-12 text-center text-slate-400">{busca ? "Nenhum cliente encontrado." : "Nenhum cliente cadastrado ainda."}</td></tr> : filtrados.map((cliente) => <tr key={cliente.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/70"><td className="px-5 py-4 font-medium text-slate-700">{cliente.nome}</td><td className="px-5 py-4 text-slate-500"><div className="space-y-1">{cliente.contato && <p className="flex items-center gap-2"><Phone size={14} />{cliente.contato}</p>}{cliente.email && <p className="flex items-center gap-2"><Mail size={14} />{cliente.email}</p>}{!cliente.contato && !cliente.email && "—"}</div></td><td className="px-5 py-4 text-slate-500">{new Date(cliente.criado_em).toLocaleDateString("pt-BR")}</td><td className="px-5 py-4 text-right"><button onClick={() => apagar(cliente.id)} title="Excluir cliente" className="text-slate-400 hover:text-red-600"><Trash2 size={17} /></button></td></tr>)}</tbody></table></div></Card>{erro && <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</p>}
+  </div>;
 }

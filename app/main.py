@@ -219,6 +219,12 @@ class LancamentoStatus(BaseModel):
     status: str
 
 
+class ClienteDados(BaseModel):
+    nome: str
+    contato: str | None = None
+    email: str | None = None
+
+
 
 # ----------------------------------------------------------------------
 # helpers
@@ -857,4 +863,28 @@ def atualizar_financeiro(lancamento_id: str, dados: LancamentoStatus):
 def excluir_financeiro(lancamento_id: str):
     if not db.excluir_lancamento(lancamento_id):
         raise HTTPException(status_code=404, detail="lançamento não encontrado")
+    return {"ok": True}
+
+
+# ----------------------------------------------------------------------
+# clientes
+# ----------------------------------------------------------------------
+@app.get("/clientes")
+def listar_clientes(busca: str | None = None):
+    return [dict(item) for item in db.listar_clientes(busca)]
+
+
+@app.post("/clientes")
+def criar_cliente(dados: ClienteDados):
+    if not dados.nome.strip():
+        raise HTTPException(status_code=400, detail="informe o nome do cliente")
+    identificador = uuid.uuid4().hex
+    db.criar_cliente(identificador, dados.nome.strip(), dados.contato.strip() if dados.contato else None, dados.email.strip() if dados.email else None)
+    return next(dict(item) for item in db.listar_clientes() if item["id"] == identificador)
+
+
+@app.delete("/clientes/{cliente_id}")
+def excluir_cliente(cliente_id: str):
+    if not db.excluir_cliente(cliente_id):
+        raise HTTPException(status_code=404, detail="cliente não encontrado")
     return {"ok": True}

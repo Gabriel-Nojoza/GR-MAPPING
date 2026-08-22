@@ -246,3 +246,8 @@ export async function getResumoFinanceiro(mes: string) { return financeiroRespos
 export async function criarLancamento(dados: { tipo: "receita" | "despesa"; descricao: string; categoria: string; valor_centavos: number; vencimento: string; observacao?: string }) { return financeiroResposta(await fetch(`${API_URL}/financeiro`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dados) })); }
 export async function marcarLancamento(id: string, status: "pendente" | "pago") { return financeiroResposta(await fetch(`${API_URL}/financeiro/${id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) })); }
 export async function excluirLancamento(id: string) { return financeiroResposta(await fetch(`${API_URL}/financeiro/${id}`, { method: "DELETE" })); }
+
+export type Cliente = { id: string; criado_em: string; nome: string; contato?: string | null; email?: string | null };
+export async function getClientes(busca = "") { const res = await fetch(`${API_URL}/clientes?busca=${encodeURIComponent(busca)}`, { cache: "no-store" }); return financeiroResposta(res) as Promise<Cliente[]>; }
+export async function criarCliente(dados: { nome: string; contato?: string; email?: string }) { return financeiroResposta(await fetch(`${API_URL}/clientes`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dados) })); }
+export async function excluirCliente(id: string) { return financeiroResposta(await fetch(`${API_URL}/clientes/${id}`, { method: "DELETE" })); }
