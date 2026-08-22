@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Download, ImagePlus, Loader2, Sparkles, X } from "lucide-react";
+import { Download, ImagePlus, Loader2, Maximize2, Sparkles, X } from "lucide-react";
 import { UploadFoto } from "@/components/medir/upload-foto";
 import { API_URL, estenderProjeto, gerarProjeto, getTerrenos, statusProjeto } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ export default function GerarProjeto() {
   const [fotosAdicionais, setFotosAdicionais] = useState<File[]>([]);
   const [referencia, setReferencia] = useState<File | null>(null);
   const [referenciaUrl, setReferenciaUrl] = useState<string | null>(null);
+  const [imagemAmpliada, setImagemAmpliada] = useState<{ url: string; titulo: string } | null>(null);
   const [descricao, setDescricao] = useState(() =>
     typeof window === "undefined" ? "" : localStorage.getItem("gerarProjeto:ultimaDescricao") ?? "",
   );
@@ -187,7 +188,7 @@ export default function GerarProjeto() {
 
           <div className="mt-5">
             {fonte === "upload" ? (
-              <UploadFoto onSelecionar={aoSelecionarFoto} />
+              <UploadFoto onSelecionar={aoSelecionarFoto} compacto />
             ) : (
               <>
                 <label className="text-sm font-medium text-slate-700">Escolha o terreno medido</label>
@@ -203,7 +204,10 @@ export default function GerarProjeto() {
           {fotoUrl && <div className="relative mt-5 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={fotoUrl} alt="Foto do terreno" className="h-64 w-full object-cover" onError={() => setErro("Este terreno não tem uma foto disponível.")} />
-            <button type="button" onClick={removerFoto} aria-label="Remover foto" className="absolute right-3 top-3 rounded-full bg-slate-900/80 p-2 text-white hover:bg-red-600"><X size={16} /></button>
+            <div className="absolute right-3 top-3 flex gap-2">
+              <button type="button" onClick={() => setImagemAmpliada({ url: fotoUrl, titulo: "Foto principal do terreno" })} className="inline-flex items-center gap-1 rounded-lg bg-slate-900/80 px-2 py-1.5 text-xs font-medium text-white hover:bg-slate-900"><Maximize2 size={14} /> Ampliar</button>
+              <button type="button" onClick={removerFoto} aria-label="Remover foto" className="rounded-lg bg-slate-900/80 p-1.5 text-white hover:bg-red-600"><X size={16} /></button>
+            </div>
           </div>}
 
           <div className="mt-5 border-t border-slate-100 pt-5">
@@ -213,19 +217,20 @@ export default function GerarProjeto() {
               {fotosAdicionais.map((arquivo, indice) => <div key={`${arquivo.name}-${indice}`} className="relative overflow-hidden rounded-lg border border-slate-200">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={URL.createObjectURL(arquivo)} alt={`Foto adicional ${indice + 1}`} className="h-20 w-full object-cover" />
-                <button type="button" onClick={() => removerFotoAdicional(indice)} aria-label={`Remover foto adicional ${indice + 1}`} className="absolute right-1 top-1 rounded-full bg-slate-900/80 p-1 text-white hover:bg-red-600"><X size={13} /></button>
+                <div className="absolute right-1 top-1 flex gap-1"><button type="button" onClick={() => setImagemAmpliada({ url: URL.createObjectURL(arquivo), titulo: `Foto adicional ${indice + 1}` })} aria-label={`Ampliar foto adicional ${indice + 1}`} className="rounded bg-slate-900/80 p-1 text-white"><Maximize2 size={13} /></button><button type="button" onClick={() => removerFotoAdicional(indice)} aria-label={`Remover foto adicional ${indice + 1}`} className="rounded bg-slate-900/80 p-1 text-white hover:bg-red-600"><X size={13} /></button></div>
               </div>)}
             </div>}
-            {fotosAdicionais.length < 3 && <div className="mt-3"><UploadFoto onSelecionar={adicionarFotoTerreno} titulo={`Adicionar foto do terreno (${fotosAdicionais.length}/3)`} ajuda="Foto da rua, lateral ou fundo do mesmo lote" /></div>}
+            {fotosAdicionais.length < 3 && <div className="mt-3"><UploadFoto onSelecionar={adicionarFotoTerreno} titulo={`Adicionar foto do terreno (${fotosAdicionais.length}/3)`} ajuda="Foto da rua, lateral ou fundo do mesmo lote" compacto /></div>}
           </div>
 
           <div className="mt-5 border-t border-slate-100 pt-5">
             <p className="text-sm font-medium text-slate-700">Foto de referência de estilo <span className="font-normal text-slate-400">(opcional)</span></p>
             <p className="mt-1 text-xs text-slate-500">Envie uma casa de referência para inspirar fachada, cores e acabamento.</p>
-            {!referenciaUrl ? <div className="mt-3"><UploadFoto onSelecionar={aoSelecionarReferencia} titulo="Adicionar referência de estilo" ajuda="PNG ou JPG de uma casa pronta" /></div> : <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 p-3">
+            {!referenciaUrl ? <div className="mt-3"><UploadFoto onSelecionar={aoSelecionarReferencia} titulo="Adicionar referência de estilo" ajuda="PNG ou JPG de uma casa pronta" compacto /></div> : <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 p-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={referenciaUrl} alt="Referência de estilo" className="h-16 w-20 rounded-lg object-cover" />
               <span className="flex-1 text-sm text-slate-600">Referência adicionada</span>
+              <Button variant="secondary" onClick={() => setImagemAmpliada({ url: referenciaUrl, titulo: "Referência de estilo" })}><Maximize2 size={15} /> Ampliar</Button>
               <Button variant="secondary" onClick={() => { setReferencia(null); setReferenciaUrl(null); }}>Remover</Button>
             </div>}
           </div>
@@ -255,6 +260,15 @@ export default function GerarProjeto() {
         </div>
         {podeEstender && <Button variant="secondary" onClick={estender} className="mt-5">Estender vídeo (+7s)</Button>}
       </Card>}
+
+      {imagemAmpliada && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4" role="dialog" aria-modal="true" aria-label={imagemAmpliada.titulo} onClick={() => setImagemAmpliada(null)}>
+        <div className="relative max-h-full max-w-5xl" onClick={(event) => event.stopPropagation()}>
+          <p className="mb-2 text-sm font-medium text-white">{imagemAmpliada.titulo}</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={imagemAmpliada.url} alt={imagemAmpliada.titulo} className="max-h-[80vh] max-w-full rounded-xl object-contain shadow-2xl" />
+          <button type="button" onClick={() => setImagemAmpliada(null)} className="absolute right-2 top-8 rounded-full bg-slate-950/80 p-2 text-white hover:bg-red-600" aria-label="Fechar imagem ampliada"><X size={18} /></button>
+        </div>
+      </div>}
     </div>
   );
 }
