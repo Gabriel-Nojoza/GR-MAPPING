@@ -251,3 +251,8 @@ export type Cliente = { id: string; criado_em: string; nome: string; contato?: s
 export async function getClientes(busca = "") { const res = await fetch(`${API_URL}/clientes?busca=${encodeURIComponent(busca)}`, { cache: "no-store" }); return financeiroResposta(res) as Promise<Cliente[]>; }
 export async function criarCliente(dados: { nome: string; contato?: string; email?: string }) { return financeiroResposta(await fetch(`${API_URL}/clientes`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dados) })); }
 export async function excluirCliente(id: string) { return financeiroResposta(await fetch(`${API_URL}/clientes/${id}`, { method: "DELETE" })); }
+
+export type Documento = { id: string; criado_em: string; titulo: string; categoria: string; nome_arquivo: string; mime?: string | null; tamanho_bytes: number };
+export async function getDocumentos(busca = "") { const res = await fetch(`${API_URL}/documentos?busca=${encodeURIComponent(busca)}`, { cache: "no-store" }); return financeiroResposta(res) as Promise<Documento[]>; }
+export async function enviarDocumento(arquivo: File, titulo: string, categoria: string) { const dados = new FormData(); dados.append("arquivo", arquivo); dados.append("titulo", titulo); dados.append("categoria", categoria); return financeiroResposta(await fetch(`${API_URL}/documentos`, { method: "POST", body: dados })); }
+export async function excluirDocumento(id: string) { return financeiroResposta(await fetch(`${API_URL}/documentos/${id}`, { method: "DELETE" })); }

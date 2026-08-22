@@ -28,7 +28,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import BaseModel
 
@@ -887,4 +887,49 @@ def criar_cliente(dados: ClienteDados):
 def excluir_cliente(cliente_id: str):
     if not db.excluir_cliente(cliente_id):
         raise HTTPException(status_code=404, detail="cliente não encontrado")
+    return {"ok": True}
+
+
+# ----------------------------------------------------------------------
+# documentos
+# ----------------------------------------------------------------------
+@app.get("/documentos")
+def listar_documentos(busca: str | None = None):
+    return [dict(item) for item in db.listar_documentos(busca)]
+
+
+@app.post("/documentos")
+def enviar_documento(
+    arquivo: UploadFile = File(...),
+    titulo: str = Form(...),
+    categoria: str = Form("Geral"),
+):
+    dados = arquivo.file.read()
+    if not dados or not titulo.strip():
+        raise HTTPException(status_code=400, detail="informe título e selecione um arquivo")
+    if len(dados) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="o arquivo deve ter no máximo 20 MB")
+    identificador = uuid.uuid4().hex
+    extensao = Path(arquivo.filename or "documento").suffix[:12]
+    caminho = UPLOADS_DIR / f"documento-{identificador}{extensao}"
+    caminho.write_bytes(dados)
+    db.criar_documento(identificador, titulo.strip(), categoria.strip() or "Geral", arquivo.filename or "documento", arquivo.content_type, len(dados))
+    return next(dict(item) for item in db.listar_documentos() if item["id"] == identificador)
+
+
+@app.get("/documentos/{documento_id}/download")
+def baixar_documento(documento_id: str):
+    documento = next((item for item in db.listar_documentos() if item["id"] == documento_id), None)
+    caminho = next(iter(UPLOADS_DIR.glob(f"documento-{documento_id}.*")), None)
+    if documento is None or caminho is None:
+        raise HTTPException(status_code=404, detail="documento não encontrado")
+    return FileResponse(caminho, media_type=documento["mime"] or "application/octet-stream", filename=documento["nome_arquivo"])
+
+
+@app.delete("/documentos/{documento_id}")
+def excluir_documento(documento_id: str):
+    if not db.excluir_documento(documento_id):
+        raise HTTPException(status_code=404, detail="documento não encontrado")
+    for arquivo in UPLOADS_DIR.glob(f"documento-{documento_id}.*"):
+        arquivo.unlink(missing_ok=True)
     return {"ok": True}

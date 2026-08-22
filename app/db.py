@@ -77,6 +77,17 @@ def init_db() -> None:
                 email TEXT
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS documentos (
+                id TEXT PRIMARY KEY,
+                criado_em TEXT NOT NULL,
+                titulo TEXT NOT NULL,
+                categoria TEXT NOT NULL,
+                nome_arquivo TEXT NOT NULL,
+                mime TEXT,
+                tamanho_bytes INTEGER NOT NULL
+            )
+        """)
         # migração leve: adiciona a coluna "nome" se o banco já existia sem ela
         colunas = {r["name"] for r in conn.execute("PRAGMA table_info(terrenos)")}
         if "nome" not in colunas:
@@ -278,4 +289,28 @@ def listar_clientes(busca: str | None = None) -> list[sqlite3.Row]:
 def excluir_cliente(id_: str) -> bool:
     with _conectar() as conn:
         cur = conn.execute("DELETE FROM clientes WHERE id = ?", (id_,))
+        return cur.rowcount > 0
+
+
+def criar_documento(id_: str, titulo: str, categoria: str, nome_arquivo: str,
+                    mime: str | None, tamanho_bytes: int) -> None:
+    with _conectar() as conn:
+        conn.execute("INSERT INTO documentos (id, criado_em, titulo, categoria, nome_arquivo, mime, tamanho_bytes) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                     (id_, _agora(), titulo, categoria, nome_arquivo, mime, tamanho_bytes))
+
+
+def listar_documentos(busca: str | None = None) -> list[sqlite3.Row]:
+    consulta, parametros = "SELECT * FROM documentos", ()
+    if busca:
+        termo = f"%{busca.strip()}%"
+        consulta += " WHERE titulo LIKE ? OR categoria LIKE ? OR nome_arquivo LIKE ?"
+        parametros = (termo, termo, termo)
+    consulta += " ORDER BY criado_em DESC"
+    with _conectar() as conn:
+        return conn.execute(consulta, parametros).fetchall()
+
+
+def excluir_documento(id_: str) -> bool:
+    with _conectar() as conn:
+        cur = conn.execute("DELETE FROM documentos WHERE id = ?", (id_,))
         return cur.rowcount > 0

@@ -9,6 +9,7 @@ import {
   Video,
   Users,
   WalletCards,
+  FolderArchive,
   Sparkles,
   Settings,
   LogOut,
@@ -28,6 +29,7 @@ const ITEMS = [
   { href: "/videos", icon: Video, label: "Vídeos salvos" },
   { href: "/clientes", icon: Users, label: "Clientes" },
   { href: "/financeiro", icon: WalletCards, label: "Financeiro" },
+  { href: "/documentos", icon: FolderArchive, label: "Documentos" },
   { href: "/gerar-projeto", icon: Sparkles, label: "Gerar Projeto IA" },
   { href: "/configuracoes", icon: Settings, label: "Configurações" },
 ] as const;
