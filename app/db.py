@@ -182,6 +182,16 @@ def resumo() -> dict:
             (desde,),
         ).fetchall()
 
+        total_clientes = conn.execute("SELECT COUNT(*) FROM clientes").fetchone()[0]
+        mes_atual = datetime.now(timezone.utc).strftime("%Y-%m")
+        financeiro = conn.execute(
+            "SELECT tipo, status, COALESCE(SUM(valor_centavos), 0) AS total "
+            "FROM lancamentos_financeiros WHERE substr(vencimento, 1, 7) = ? GROUP BY tipo, status",
+            (mes_atual,),
+        ).fetchall()
+
+    valores = {(linha["tipo"], linha["status"]): linha["total"] / 100 for linha in financeiro}
+
     return {
         "total_terrenos": total_terrenos,
         "area_total_m2": area_total_m2,
@@ -189,6 +199,11 @@ def resumo() -> dict:
         "videos_processando": videos_processando,
         "terrenos_7dias": terrenos_7dias,
         "medicoes_por_dia": {r["dia"]: r["n"] for r in por_dia},
+        "total_clientes": total_clientes,
+        "receitas_pagas_mes": valores.get(("receita", "pago"), 0),
+        "despesas_pagas_mes": valores.get(("despesa", "pago"), 0),
+        "a_receber_mes": valores.get(("receita", "pendente"), 0),
+        "a_pagar_mes": valores.get(("despesa", "pendente"), 0),
     }
 
 

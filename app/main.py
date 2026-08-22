@@ -180,6 +180,11 @@ class PainelResumo(BaseModel):
     terrenos_7dias: int
     medicoes_por_dia: dict[str, int]
     atividades: list[Atividade]
+    total_clientes: int
+    receitas_pagas_mes: float
+    despesas_pagas_mes: float
+    a_receber_mes: float
+    a_pagar_mes: float
 
 
 class Terreno(BaseModel):
@@ -805,6 +810,11 @@ def painel_resumo():
         terrenos_7dias=r["terrenos_7dias"],
         medicoes_por_dia=r["medicoes_por_dia"],
         atividades=[Atividade(**a) for a in db.atividades_recentes()],
+        total_clientes=r["total_clientes"],
+        receitas_pagas_mes=r["receitas_pagas_mes"],
+        despesas_pagas_mes=r["despesas_pagas_mes"],
+        a_receber_mes=r["a_receber_mes"],
+        a_pagar_mes=r["a_pagar_mes"],
     )
 
 
