@@ -114,6 +114,16 @@ def init_db() -> None:
             )
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS usuarios (
+                id TEXT PRIMARY KEY,
+                criado_em TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                nome TEXT,
+                senha_hash TEXT NOT NULL,
+                ativo INTEGER NOT NULL DEFAULT 1
+            )
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS documentos (
                 id TEXT PRIMARY KEY,
                 criado_em TEXT NOT NULL,
@@ -391,6 +401,29 @@ def excluir_cliente(id_: str) -> bool:
     with _conectar() as conn:
         cur = conn.execute("DELETE FROM clientes WHERE id = ?", (id_,))
         return cur.rowcount > 0
+
+
+# ----------------------------------------------------------------------
+# usuÃ¡rios de acesso
+# ----------------------------------------------------------------------
+def obter_usuario_por_email(email: str) -> sqlite3.Row | None:
+    with _conectar() as conn:
+        return conn.execute("SELECT * FROM usuarios WHERE email = ?", (email.lower(),)).fetchone()
+
+
+def criar_usuario_se_ausente(id_: str, email: str, nome: str | None, senha_hash: str) -> None:
+    with _conectar() as conn:
+        if DATABASE_URL:
+            conn.execute(
+                "INSERT INTO usuarios (id, criado_em, email, nome, senha_hash, ativo) VALUES (?, ?, ?, ?, ?, 1) "
+                "ON CONFLICT (email) DO NOTHING",
+                (id_, _agora(), email.lower(), nome, senha_hash),
+            )
+        else:
+            conn.execute(
+                "INSERT OR IGNORE INTO usuarios (id, criado_em, email, nome, senha_hash, ativo) VALUES (?, ?, ?, ?, ?, 1)",
+                (id_, _agora(), email.lower(), nome, senha_hash),
+            )
 
 
 def criar_documento(id_: str, titulo: str, categoria: str, nome_arquivo: str,

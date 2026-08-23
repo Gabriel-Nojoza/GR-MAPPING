@@ -49,11 +49,12 @@ from app.ia_projeto import (
     gerar_video_projeto,
 )
 from app.jobs import Job, JobStatus, criar_job, obter_job
-from app.auth import credenciais_validas
+from app.auth import credenciais_validas, garantir_usuarios_iniciais
 from app.evolution import EvolutionError, conectar as conectar_whatsapp, enviar_texto as enviar_whatsapp, status as status_whatsapp
 
 app = FastAPI(title="Medição de Terreno API", version="0.1.0")
 db.init_db()
+garantir_usuarios_iniciais()
 
 # libera o front (em produção, troque "*" pelo domínio do seu app)
 origens_permitidas = [
