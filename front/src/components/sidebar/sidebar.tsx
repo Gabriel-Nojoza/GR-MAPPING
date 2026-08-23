@@ -30,7 +30,7 @@ const ITEMS = [
   { href: "/terrenos", icon: Map, label: "Terrenos" },
   { href: "/videos", icon: Video, label: "Vídeos salvos" },
   { href: "/clientes", icon: Users, label: "Clientes" },
-  { href: "/imoveis", icon: Building2, label: "ImÃ³veis" },
+  { href: "/imoveis", icon: Building2, label: "Imóveis" },
   { href: "/financeiro", icon: WalletCards, label: "Financeiro" },
   { href: "/cobrancas", icon: ReceiptText, label: "CobranÃ§as" },
   { href: "/documentos", icon: FolderArchive, label: "Documentos" },
