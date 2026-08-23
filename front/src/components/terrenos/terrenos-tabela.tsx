@@ -7,20 +7,27 @@ import { renomearTerreno, excluirTerreno } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { TerrenoFotoMarcada } from "./terreno-foto-marcada";
+import { CanvasPoligono } from "@/components/medir/canvas-poligono";
+import type { Ponto } from "@/types/medicao";
+import { API_URL } from "@/lib/api";
 
 export function TerrenosTabela({ terrenosIniciais }: { terrenosIniciais: Terreno[] }) {
   const [terrenos, setTerrenos] = useState(terrenosIniciais);
   const [editando, setEditando] = useState<Terreno | null>(null);
   const [nomeEditado, setNomeEditado] = useState("");
+  const [remarcando, setRemarcando] = useState(false);
+  const [pontosRemarcados, setPontosRemarcados] = useState<Ponto[]>([]);
 
   function iniciarEdicao(t: Terreno) {
     setEditando(t);
     setNomeEditado(t.nome ?? t.nome_foto ?? "");
+    setRemarcando(false);
+    setPontosRemarcados(t.pontos.map(([x, y]) => ({ x, y })));
   }
 
   async function salvarEdicao() {
     if (!editando) return;
-    const atualizado = await renomearTerreno(editando.id, nomeEditado);
+    const atualizado = await renomearTerreno(editando.id, nomeEditado, remarcando ? pontosRemarcados.map((ponto) => [ponto.x, ponto.y]) : undefined);
     setTerrenos((atual) => atual.map((t) => (t.id === atualizado.id ? atualizado : t)));
     setEditando(null);
   }
@@ -95,6 +102,11 @@ export function TerrenosTabela({ terrenosIniciais }: { terrenosIniciais: Terreno
             <h3 className="text-sm font-medium text-slate-500">Editar terreno</h3>
 
             <TerrenoFotoMarcada terreno={editando} />
+
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-medium text-slate-700">Linhas da medição</p><p className="text-xs text-slate-500">{remarcando ? "Clique na foto para marcar o contorno do terreno." : "Mostre ou corrija o polígono marcado."}</p></div><Button variant="secondary" onClick={() => { setRemarcando((ativo) => !ativo); setPontosRemarcados(editando.pontos.map(([x, y]) => ({ x, y }))); }}>{remarcando ? "Cancelar marcação" : editando.pontos.length ? "Corrigir linhas" : "Remarcar linhas"}</Button></div>
+              {remarcando && <div className="mt-3"><CanvasPoligono imagemUrl={`${API_URL}/terrenos/${editando.id}/foto`} pontos={pontosRemarcados} onAdicionarPonto={(ponto) => setPontosRemarcados((atuais) => atuais.length >= 4 ? atuais : [...atuais, ponto])} /><div className="mt-2 flex items-center justify-between text-xs text-slate-500"><span>{pontosRemarcados.length}/4 pontos marcados</span><button type="button" onClick={() => setPontosRemarcados([])} className="text-primary hover:underline">Limpar pontos</button></div></div>}
+            </div>
 
             <label className="mt-4 block text-xs font-medium text-slate-500">
               Nome / local do terreno

@@ -209,6 +209,7 @@ class JobResumo(BaseModel):
 
 class TerrenoUpdate(BaseModel):
     nome: str | None = None
+    pontos: list[list[float]] | None = None
 
 
 class LancamentoDados(BaseModel):
@@ -772,7 +773,12 @@ def videos():
 
 @app.patch("/terrenos/{terreno_id}", response_model=Terreno)
 def editar_terreno(terreno_id: str, dados: TerrenoUpdate):
-    if not db.renomear_terreno(terreno_id, dados.nome):
+    if dados.pontos is not None:
+        if len(dados.pontos) < 3 or any(len(ponto) != 2 for ponto in dados.pontos):
+            raise HTTPException(status_code=400, detail="marque pelo menos 3 pontos válidos")
+        if not db.salvar_pontos_terreno(terreno_id, json.dumps(dados.pontos)):
+            raise HTTPException(status_code=404, detail="terreno não encontrado")
+    if dados.nome is not None and not db.renomear_terreno(terreno_id, dados.nome):
         raise HTTPException(status_code=404, detail="terreno não encontrado")
     linha = next((t for t in db.listar_terrenos(1000) if t["id"] == terreno_id), None)
     return _resposta_terreno(linha)

@@ -240,6 +240,12 @@ def renomear_terreno(id_: str, nome: str | None) -> bool:
         return cur.rowcount > 0
 
 
+def salvar_pontos_terreno(id_: str, pontos_json: str) -> bool:
+    with _conectar() as conn:
+        cur = conn.execute("UPDATE terrenos SET pontos_json = ? WHERE id = ?", (pontos_json, id_))
+        return cur.rowcount > 0
+
+
 def excluir_terreno(id_: str) -> bool:
     """Remove o terreno. Devolve False se o id não existir."""
     with _conectar() as conn:

@@ -207,11 +207,11 @@ export async function statusEvolucao(grupoId: string): Promise<EvolucaoStatus> {
 }
 
 
-export async function renomearTerreno(id: string, nome: string): Promise<Terreno> {
+export async function renomearTerreno(id: string, nome: string, pontos?: [number, number][]): Promise<Terreno> {
   const res = await fetch(`${API_URL}/terrenos/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ nome }),
+    body: JSON.stringify({ nome, ...(pontos ? { pontos } : {}) }),
   });
 
   if (!res.ok) {
