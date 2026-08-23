@@ -256,3 +256,6 @@ export type Documento = { id: string; criado_em: string; titulo: string; categor
 export async function getDocumentos(busca = "") { const res = await fetch(`${API_URL}/documentos?busca=${encodeURIComponent(busca)}`, { cache: "no-store" }); return financeiroResposta(res) as Promise<Documento[]>; }
 export async function enviarDocumento(arquivo: File, titulo: string, categoria: string) { const dados = new FormData(); dados.append("arquivo", arquivo); dados.append("titulo", titulo); dados.append("categoria", categoria); return financeiroResposta(await fetch(`${API_URL}/documentos`, { method: "POST", body: dados })); }
 export async function excluirDocumento(id: string) { return financeiroResposta(await fetch(`${API_URL}/documentos/${id}`, { method: "DELETE" })); }
+
+export async function getWhatsappStatus() { return financeiroResposta(await fetch(`${API_URL}/whatsapp/status`, { cache: "no-store" })) as Promise<{ configurada: boolean; instancia?: string; estado: string; erro?: string }>; }
+export async function conectarWhatsapp() { return financeiroResposta(await fetch(`${API_URL}/whatsapp/conectar`, { method: "POST" })) as Promise<{ qrcode: string; instancia: string }>; }

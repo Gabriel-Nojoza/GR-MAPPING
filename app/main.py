@@ -50,6 +50,7 @@ from app.ia_projeto import (
 )
 from app.jobs import Job, JobStatus, criar_job, obter_job
 from app.auth import credenciais_validas
+from app.evolution import EvolutionError, conectar as conectar_whatsapp, status as status_whatsapp
 
 app = FastAPI(title="Medição de Terreno API", version="0.1.0")
 db.init_db()
@@ -949,3 +950,25 @@ def excluir_documento(documento_id: str):
     for arquivo in UPLOADS_DIR.glob(f"documento-{documento_id}.*"):
         arquivo.unlink(missing_ok=True)
     return {"ok": True}
+
+
+# ----------------------------------------------------------------------
+# WhatsApp / Evolution API
+# ----------------------------------------------------------------------
+@app.get("/whatsapp/status")
+def whatsapp_status():
+    try:
+        return status_whatsapp()
+    except EvolutionError as erro:
+        return {"configurada": False, "estado": "indisponível", "erro": str(erro)}
+
+
+@app.post("/whatsapp/conectar")
+def whatsapp_conectar():
+    try:
+        resultado = conectar_whatsapp()
+        if not resultado.get("qrcode"):
+            raise HTTPException(status_code=502, detail="A Evolution não retornou um QR Code.")
+        return resultado
+    except EvolutionError as erro:
+        raise HTTPException(status_code=502, detail=str(erro))
