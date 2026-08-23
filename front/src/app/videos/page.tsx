@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertCircle, Download, ImageIcon, PlayCircle, Sparkles } from "lucide-react";
-import { API_URL, getVideos } from "@/lib/api";
+import { AlertCircle, Download, ImageIcon, PlayCircle, Sparkles, Upload } from "lucide-react";
+import { API_URL, getVideos, importarVideoExterno } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import type { JobResumo } from "@/types/job";
 
@@ -21,10 +21,23 @@ function resumo(descricao: string | null) {
 export default function Videos() {
   const [videos, setVideos] = useState<JobResumo[]>([]);
   const [erro, setErro] = useState(false);
+  const [enviando, setEnviando] = useState("");
 
   useEffect(() => {
     getVideos().then(setVideos).catch(() => setErro(true));
   }, []);
+
+  async function importar(id: string, arquivo: File | undefined) {
+    if (!arquivo) return;
+    try {
+      setEnviando(id);
+      await importarVideoExterno(id, arquivo);
+      window.location.reload();
+    } catch {
+      setErro(true);
+      setEnviando("");
+    }
+  }
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -79,6 +92,7 @@ export default function Videos() {
                   <a href={`${API_URL}/videos-salvos/${video.id}/download`} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 font-medium text-white hover:bg-primary-hover">
                     <Download size={16} /> Baixar MP4
                   </a>
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 font-medium text-slate-700 hover:bg-slate-50"><Upload size={16} /> {enviando === video.id ? "Importando..." : "Importar MP4 do Flow"}<input type="file" accept="video/mp4,.mp4" disabled={enviando === video.id} className="hidden" onChange={(event) => importar(video.id, event.target.files?.[0])} /></label>
                 </div>
               )}
             </Card>

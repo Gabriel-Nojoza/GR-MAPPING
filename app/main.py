@@ -695,6 +695,22 @@ def video_salvo(job_id: str):
     return Response(content=caminho.read_bytes(), media_type=mime)
 
 
+@app.post("/videos-salvos/{job_id}/importar")
+def importar_video_externo(job_id: str, video: UploadFile = File(...)):
+    """Substitui o vÃ­deo local por um MP4 exportado do Google Flow (ou outro editor)."""
+    if not any(item["id"] == job_id for item in db.listar_jobs(1000)):
+        raise HTTPException(status_code=404, detail="projeto nÃ£o encontrado")
+    dados = video.file.read()
+    if not dados:
+        raise HTTPException(status_code=400, detail="o vÃ­deo enviado estÃ¡ vazio")
+    if len(dados) > 250 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="o vÃ­deo deve ter no mÃ¡ximo 250 MB")
+    if video.content_type not in {"video/mp4", "video/quicktime", "application/octet-stream"}:
+        raise HTTPException(status_code=400, detail="envie um arquivo de vÃ­deo MP4")
+    _salvar_arquivo_projeto(job_id, "video", dados, "video/mp4")
+    return {"ok": True}
+
+
 @app.get("/videos-salvos/{job_id}/download")
 def baixar_video_salvo(job_id: str):
     caminho = _arquivo_projeto(job_id, "video")

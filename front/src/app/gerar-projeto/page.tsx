@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Download, ImagePlus, Loader2, Maximize2, Sparkles, X } from "lucide-react";
+import { Copy, Download, ExternalLink, ImagePlus, Loader2, Maximize2, Sparkles, X } from "lucide-react";
 import { UploadFoto } from "@/components/medir/upload-foto";
 import { API_URL, estenderProjeto, gerarProjeto, getTerrenos, statusProjeto } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -163,6 +163,15 @@ export default function GerarProjeto() {
     }
   }
 
+  async function abrirGoogleFlow() {
+    try {
+      await navigator.clipboard.writeText(montarDescricaoFinal());
+    } catch {
+      // O navegador pode negar a permissÃ£o; o texto tambÃ©m pode ser copiado pelo botÃ£o abaixo.
+    }
+    window.open("https://labs.google/fx/tools/flow", "_blank", "noopener,noreferrer");
+  }
+
   const gerando = status === "processando";
   const terrenoAtual = terrenosSalvos.find((item) => item.id === terrenoSelecionadoId);
 
@@ -259,6 +268,10 @@ export default function GerarProjeto() {
           <video key={duracaoTotal} src={`${API_URL}/gerar-projeto/${jobId}/video?v=${duracaoTotal}`} controls className="w-full rounded-xl border border-slate-200" />
         </div>
         {podeEstender && <Button variant="secondary" onClick={estender} className="mt-5">Estender vídeo (+7s)</Button>}
+        <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold text-blue-950">Teste Google Flow</p><p className="mt-1 text-sm text-blue-800">Abra o Flow, envie a imagem gerada e cole o prompt. Depois baixe o MP4 e importe-o em Vídeos salvos.</p></div><Button variant="secondary" onClick={abrirGoogleFlow}><ExternalLink size={16} /> Abrir Google Flow</Button></div>
+          <div className="mt-3 flex flex-wrap gap-2"><a href={`${API_URL}/gerar-projeto/${jobId}/imagem`} download={`referencia-${jobId}.jpg`} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100"><Download size={15} /> Baixar imagem</a><button type="button" onClick={() => navigator.clipboard.writeText(montarDescricaoFinal())} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100"><Copy size={15} /> Copiar prompt</button></div>
+        </div>
       </Card>}
 
       {imagemAmpliada && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4" role="dialog" aria-modal="true" aria-label={imagemAmpliada.titulo} onClick={() => setImagemAmpliada(null)}>
