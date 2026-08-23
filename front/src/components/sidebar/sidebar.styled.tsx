@@ -11,7 +11,7 @@ export function SidebarContainer({ children }: { children: ReactNode }) {
 
 export function SidebarHeader({ children }: { children: ReactNode }) {
   return (
-    <div className="flex h-32 items-center justify-center overflow-hidden border-b border-white/10 px-4 py-3">
+    <div className="sidebar-brand flex h-32 items-center justify-center overflow-hidden border-b border-white/10 px-4 py-3">
       {children}
     </div>
   );

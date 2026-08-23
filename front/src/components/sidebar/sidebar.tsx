@@ -46,14 +46,16 @@ export function Sidebar() {
   return (
     <SidebarContainer>
       <SidebarHeader>
-        <Image
-          src="/logo.png"
-          alt="GR Mapping"
-          width={112}
-          height={112}
-          priority
-          className="h-auto w-28 scale-125 object-contain"
-        />
+        <div className="sidebar-logo-wrap">
+          <Image
+            src="/logo.png"
+            alt="GR Mapping"
+            width={128}
+            height={128}
+            priority
+            className="sidebar-logo h-auto w-32 object-contain"
+          />
+        </div>
       </SidebarHeader>
       <SidebarNav>
         {ITEMS.map((item) => (

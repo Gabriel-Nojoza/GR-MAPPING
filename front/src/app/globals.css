@@ -49,6 +49,27 @@ body {
 .login-entrance { animation: login-entrance 600ms ease-out both; }
 .login-glow { animation: login-glow 7s ease-in-out infinite; }
 
+@keyframes sidebar-logo-float {
+  0%, 100% { transform: translateY(0) scale(1); filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.35)); }
+  50% { transform: translateY(-4px) scale(1.025); filter: drop-shadow(0 12px 18px rgba(99, 102, 241, 0.32)); }
+}
+
+@keyframes sidebar-logo-glow {
+  0%, 100% { opacity: 0.3; transform: scale(0.9); }
+  50% { opacity: 0.7; transform: scale(1.14); }
+}
+
+.sidebar-brand {
+  background: radial-gradient(circle at 50% 20%, rgba(99, 102, 241, 0.14), transparent 60%);
+}
+
+.sidebar-logo-wrap { position: relative; display: flex; align-items: center; justify-content: center; }
+.sidebar-logo-wrap::before {
+  content: ""; position: absolute; width: 92px; height: 58px; border-radius: 999px;
+  background: rgba(99, 102, 241, 0.28); filter: blur(18px); animation: sidebar-logo-glow 5s ease-in-out infinite;
+}
+.sidebar-logo { position: relative; animation: sidebar-logo-float 5s ease-in-out infinite; }
+
 @media (prefers-reduced-motion: reduce) {
-  .login-logo-float, .login-entrance, .login-glow { animation: none; }
+  .login-logo-float, .login-entrance, .login-glow, .sidebar-logo, .sidebar-logo-wrap::before { animation: none; }
 }
