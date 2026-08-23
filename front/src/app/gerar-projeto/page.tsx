@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Copy, Download, ExternalLink, ImagePlus, Loader2, Maximize2, Sparkles, X } from "lucide-react";
+import { Copy, Download, ExternalLink, ImagePlus, Loader2, Maximize2, Sparkles, Upload, X } from "lucide-react";
 import { UploadFoto } from "@/components/medir/upload-foto";
-import { API_URL, estenderProjeto, gerarProjeto, getTerrenos, statusProjeto } from "@/lib/api";
+import { API_URL, criarProjetoExterno, estenderProjeto, gerarProjeto, getTerrenos, importarVideoExterno, statusProjeto } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { Terreno } from "@/types/terreno";
@@ -29,6 +29,9 @@ export default function GerarProjeto() {
   const [duracaoTotal, setDuracaoTotal] = useState(0);
   const [podeEstender, setPodeEstender] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [flowJobId, setFlowJobId] = useState<string | null>(null);
+  const [flowFotoUrl, setFlowFotoUrl] = useState<string | null>(null);
+  const [flowImportando, setFlowImportando] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -172,6 +175,36 @@ export default function GerarProjeto() {
     window.open("https://labs.google/fx/tools/flow", "_blank", "noopener,noreferrer");
   }
 
+  async function prepararGoogleFlow() {
+    if (!descricao.trim()) { setErro("Descreva o projeto antes de abrir o Google Flow."); return; }
+    const arquivo = await obterArquivo();
+    if (!arquivo) return;
+    try {
+      const prompt = montarDescricaoFinal();
+      const projeto = await criarProjetoExterno(prompt);
+      setFlowJobId(projeto.job_id);
+      setFlowFotoUrl(URL.createObjectURL(arquivo));
+      localStorage.setItem("gerarProjeto:ultimaDescricao", descricao);
+      await navigator.clipboard.writeText(prompt);
+      window.open("https://labs.google/fx/tools/flow", "_blank", "noopener,noreferrer");
+      setErro(null);
+    } catch (causa) {
+      setErro(causa instanceof Error ? causa.message : "Não foi possível preparar o projeto no Google Flow.");
+    }
+  }
+
+  async function importarDoFlow(arquivo: File | undefined) {
+    if (!arquivo || !flowJobId) return;
+    try {
+      setFlowImportando(true);
+      await importarVideoExterno(flowJobId, arquivo);
+      window.location.href = "/videos";
+    } catch (causa) {
+      setErro(causa instanceof Error ? causa.message : "Não foi possível importar o MP4 do Flow.");
+      setFlowImportando(false);
+    }
+  }
+
   const gerando = status === "processando";
   const terrenoAtual = terrenosSalvos.find((item) => item.id === terrenoSelecionadoId);
 
@@ -255,10 +288,14 @@ export default function GerarProjeto() {
             {gerando ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
             {gerando ? "Criando imagem e vídeo..." : "Gerar projeto"}
           </Button>
+          <button type="button" onClick={prepararGoogleFlow} disabled={gerando} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-medium text-blue-800 transition hover:bg-blue-100 disabled:opacity-50"><ExternalLink size={16} /> Gerar pelo Google Flow (teste)</button>
+          <p className="mt-2 text-center text-xs text-slate-400">Usa a foto original do terreno e o prompt; não consome créditos da API Gemini.</p>
           {status === "processando" && <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">A imagem está sendo criada pela IA. Em seguida, a VPS prepara o vídeo automaticamente.</p>}
           {erro && <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</p>}
         </Card>
       </div>
+
+      {flowJobId && flowFotoUrl && <Card className="mt-6 border-blue-100 bg-blue-50/60 p-5 sm:p-6"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-lg font-semibold text-slate-900">Projeto preparado para o Google Flow</p><p className="mt-1 text-sm text-slate-600">O prompt já foi copiado. No Flow, envie a foto abaixo como primeiro frame ou referência e gere o vídeo.</p></div><Button variant="secondary" onClick={abrirGoogleFlow}><ExternalLink size={16} /> Abrir Flow novamente</Button></div><div className="mt-4 flex flex-wrap gap-3"><a href={flowFotoUrl} download="terreno-referencia.jpg" className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-800"><Download size={16} /> Baixar foto do terreno</a><button type="button" onClick={() => navigator.clipboard.writeText(montarDescricaoFinal())} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-800"><Copy size={16} /> Copiar prompt</button><label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white"><Upload size={16} /> {flowImportando ? "Importando MP4..." : "Importar MP4 do Flow"}<input type="file" accept="video/mp4,.mp4" disabled={flowImportando} className="hidden" onChange={(event) => importarDoFlow(event.target.files?.[0])} /></label></div></Card>}
 
       {status === "pronto" && jobId && <Card className="mt-6 p-5 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold text-slate-900">Projeto pronto</h2><p className="text-sm text-slate-500">Imagem criada por IA e vídeo de {duracaoTotal}s montado na VPS.</p></div><a href={`${API_URL}/videos-salvos/${jobId}/download`} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-primary-hover"><Download size={16} /> Baixar MP4</a></div>
