@@ -984,8 +984,7 @@ def enviar_foto_imovel(imovel_id: str, foto: UploadFile = File(...)):
     for anterior in UPLOADS_DIR.glob(f"imovel-{imovel_id}.*"):
         anterior.unlink(missing_ok=True)
     (UPLOADS_DIR / f"imovel-{imovel_id}{extensao}").write_bytes(dados)
-    with db._conectar() as conn:
-        conn.execute("UPDATE imoveis SET foto_nome = ?, foto_mime = ? WHERE id = ?", foto.filename or "foto do imÃ³vel", foto.content_type, imovel_id)
+    db.atualizar_foto_imovel(imovel_id, foto.filename or "foto do imÃ³vel", foto.content_type)
     return {"ok": True}
 
 

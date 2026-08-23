@@ -13,8 +13,42 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+try:
+    import psycopg
+    from psycopg.rows import dict_row
+except ImportError:  # permite rodar a versÃ£o SQLite antes da primeira instalaÃ§Ã£o
+    psycopg = None
+    dict_row = None
+
 DB_PATH = Path(os.environ.get("MEDICAO_DB_PATH")
                 or Path(__file__).resolve().parent.parent / "dados.db")
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+
+
+def _url_postgres() -> str:
+    """Garante SSL para a conexÃ£o externa do Supabase sem registrar a senha."""
+    if "sslmode=" in DATABASE_URL:
+        return DATABASE_URL
+    return f"{DATABASE_URL}{'&' if '?' in DATABASE_URL else '?'}sslmode=require"
+
+
+class ConexaoPostgres:
+    """Adaptador pequeno: mantÃ©m as consultas legadas SQLite compatÃ­veis com Postgres."""
+    def __init__(self):
+        if psycopg is None:
+            raise RuntimeError("Driver PostgreSQL nÃ£o instalado. RefaÃ§a o build do container.")
+        self.conn = psycopg.connect(_url_postgres(), row_factory=dict_row)
+
+    def execute(self, sql: str, parametros=()):
+        sql = sql.replace("?", "%s").replace(" COLLATE NOCASE", "")
+        return self.conn.execute(sql, parametros)
+
+    def __enter__(self):
+        self.conn.__enter__()
+        return self
+
+    def __exit__(self, *args):
+        return self.conn.__exit__(*args)
 
 _STATUS_ROTULO = {
     "processando": "Vídeo em processamento",
@@ -23,7 +57,9 @@ _STATUS_ROTULO = {
 }
 
 
-def _conectar() -> sqlite3.Connection:
+def _conectar() -> sqlite3.Connection | ConexaoPostgres:
+    if DATABASE_URL:
+        return ConexaoPostgres()
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -123,7 +159,12 @@ def init_db() -> None:
             )
         """)
         # migração leve: adiciona a coluna "nome" se o banco já existia sem ela
-        colunas = {r["name"] for r in conn.execute("PRAGMA table_info(terrenos)")}
+        if DATABASE_URL:
+            colunas = {r["column_name"] for r in conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = %s", ("terrenos",)
+            )}
+        else:
+            colunas = {r["name"] for r in conn.execute("PRAGMA table_info(terrenos)")}
         if "nome" not in colunas:
             conn.execute("ALTER TABLE terrenos ADD COLUMN nome TEXT")
         if "pontos_json" not in colunas:
@@ -131,7 +172,12 @@ def init_db() -> None:
 
         # migração leve: agrupamento de jobs que fazem parte da mesma
         # "evolução da obra" (várias etapas geradas a partir de uma descrição)
-        colunas_jobs = {r["name"] for r in conn.execute("PRAGMA table_info(jobs)")}
+        if DATABASE_URL:
+            colunas_jobs = {r["column_name"] for r in conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = %s", ("jobs",)
+            )}
+        else:
+            colunas_jobs = {r["name"] for r in conn.execute("PRAGMA table_info(jobs)")}
         if "grupo_id" not in colunas_jobs:
             conn.execute("ALTER TABLE jobs ADD COLUMN grupo_id TEXT")
         if "etapa" not in colunas_jobs:
@@ -414,6 +460,11 @@ def excluir_imovel(id_: str) -> bool:
     with _conectar() as conn:
         cur = conn.execute("DELETE FROM imoveis WHERE id = ?", (id_,))
         return cur.rowcount > 0
+
+
+def atualizar_foto_imovel(id_: str, nome: str, mime: str | None) -> None:
+    with _conectar() as conn:
+        conn.execute("UPDATE imoveis SET foto_nome = ?, foto_mime = ? WHERE id = ?", (nome, mime, id_))
 
 
 def criar_cobranca(id_: str, imovel_id: str, cliente_id: str, competencia: str,

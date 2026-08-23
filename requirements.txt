@@ -6,3 +6,4 @@ python-multipart
 shapely
 google-genai
 python-dotenv
+psycopg[binary]
