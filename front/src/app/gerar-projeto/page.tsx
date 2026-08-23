@@ -166,12 +166,18 @@ export default function GerarProjeto() {
     }
   }
 
-  async function abrirGoogleFlow() {
+  async function copiarPromptFlow() {
     try {
+      if (!navigator.clipboard?.writeText) return false;
       await navigator.clipboard.writeText(montarDescricaoFinal());
+      return true;
     } catch {
-      // O navegador pode negar a permissÃ£o; o texto tambÃ©m pode ser copiado pelo botÃ£o abaixo.
+      return false;
     }
+  }
+
+  async function abrirGoogleFlow() {
+    await copiarPromptFlow();
     window.open("https://labs.google/fx/tools/flow", "_blank", "noopener,noreferrer");
   }
 
@@ -185,7 +191,7 @@ export default function GerarProjeto() {
       setFlowJobId(projeto.job_id);
       setFlowFotoUrl(URL.createObjectURL(arquivo));
       localStorage.setItem("gerarProjeto:ultimaDescricao", descricao);
-      await navigator.clipboard.writeText(prompt);
+      await copiarPromptFlow();
       window.open("https://labs.google/fx/tools/flow", "_blank", "noopener,noreferrer");
       setErro(null);
     } catch (causa) {
@@ -295,7 +301,7 @@ export default function GerarProjeto() {
         </Card>
       </div>
 
-      {flowJobId && flowFotoUrl && <Card className="mt-6 border-blue-100 bg-blue-50/60 p-5 sm:p-6"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-lg font-semibold text-slate-900">Projeto preparado para o Google Flow</p><p className="mt-1 text-sm text-slate-600">O prompt já foi copiado. No Flow, envie a foto abaixo como primeiro frame ou referência e gere o vídeo.</p></div><Button variant="secondary" onClick={abrirGoogleFlow}><ExternalLink size={16} /> Abrir Flow novamente</Button></div><div className="mt-4 flex flex-wrap gap-3"><a href={flowFotoUrl} download="terreno-referencia.jpg" className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-800"><Download size={16} /> Baixar foto do terreno</a><button type="button" onClick={() => navigator.clipboard.writeText(montarDescricaoFinal())} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-800"><Copy size={16} /> Copiar prompt</button><label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white"><Upload size={16} /> {flowImportando ? "Importando MP4..." : "Importar MP4 do Flow"}<input type="file" accept="video/mp4,.mp4" disabled={flowImportando} className="hidden" onChange={(event) => importarDoFlow(event.target.files?.[0])} /></label></div></Card>}
+      {flowJobId && flowFotoUrl && <Card className="mt-6 border-blue-100 bg-blue-50/60 p-5 sm:p-6"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-lg font-semibold text-slate-900">Projeto preparado para o Google Flow</p><p className="mt-1 text-sm text-slate-600">No Flow, envie a foto abaixo como primeiro frame ou referência e gere o vídeo.</p></div><Button variant="secondary" onClick={abrirGoogleFlow}><ExternalLink size={16} /> Abrir Flow novamente</Button></div><div className="mt-4 flex flex-wrap gap-3"><a href={flowFotoUrl} download="terreno-referencia.jpg" className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-800"><Download size={16} /> Baixar foto do terreno</a><button type="button" onClick={copiarPromptFlow} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-800"><Copy size={16} /> Copiar prompt</button><label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white"><Upload size={16} /> {flowImportando ? "Importando MP4..." : "Importar MP4 do Flow"}<input type="file" accept="video/mp4,.mp4" disabled={flowImportando} className="hidden" onChange={(event) => importarDoFlow(event.target.files?.[0])} /></label></div></Card>}
 
       {status === "pronto" && jobId && <Card className="mt-6 p-5 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold text-slate-900">Projeto pronto</h2><p className="text-sm text-slate-500">Imagem criada por IA e vídeo de {duracaoTotal}s montado na VPS.</p></div><a href={`${API_URL}/videos-salvos/${jobId}/download`} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-primary-hover"><Download size={16} /> Baixar MP4</a></div>
@@ -307,7 +313,7 @@ export default function GerarProjeto() {
         {podeEstender && <Button variant="secondary" onClick={estender} className="mt-5">Estender vídeo (+7s)</Button>}
         <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold text-blue-950">Teste Google Flow</p><p className="mt-1 text-sm text-blue-800">Abra o Flow, envie a imagem gerada e cole o prompt. Depois baixe o MP4 e importe-o em Vídeos salvos.</p></div><Button variant="secondary" onClick={abrirGoogleFlow}><ExternalLink size={16} /> Abrir Google Flow</Button></div>
-          <div className="mt-3 flex flex-wrap gap-2"><a href={`${API_URL}/gerar-projeto/${jobId}/imagem`} download={`referencia-${jobId}.jpg`} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100"><Download size={15} /> Baixar imagem</a><button type="button" onClick={() => navigator.clipboard.writeText(montarDescricaoFinal())} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100"><Copy size={15} /> Copiar prompt</button></div>
+          <div className="mt-3 flex flex-wrap gap-2"><a href={`${API_URL}/gerar-projeto/${jobId}/imagem`} download={`referencia-${jobId}.jpg`} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100"><Download size={15} /> Baixar imagem</a><button type="button" onClick={copiarPromptFlow} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100"><Copy size={15} /> Copiar prompt</button></div>
         </div>
       </Card>}
 
