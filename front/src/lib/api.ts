@@ -259,3 +259,24 @@ export async function excluirDocumento(id: string) { return financeiroResposta(a
 
 export async function getWhatsappStatus() { return financeiroResposta(await fetch(`${API_URL}/whatsapp/status`, { cache: "no-store" })) as Promise<{ configurada: boolean; instancia?: string; estado: string; erro?: string }>; }
 export async function conectarWhatsapp() { return financeiroResposta(await fetch(`${API_URL}/whatsapp/conectar`, { method: "POST" })) as Promise<{ qrcode: string; instancia: string }>; }
+
+export type Imovel = {
+  id: string; criado_em: string; titulo: string; tipo: string; endereco?: string | null;
+  descricao?: string | null; valor_aluguel: number; taxa_condominio: number;
+  status: "disponivel" | "alugado"; cliente_id?: string | null; cliente_nome?: string | null;
+  dia_vencimento?: number | null; foto_nome?: string | null;
+};
+export type Cobranca = {
+  id: string; competencia: string; vencimento: string; valor: number;
+  status: "pendente" | "pago" | "atrasado"; imovel_id: string; cliente_id: string;
+  imovel_titulo: string; cliente_nome: string; cliente_contato?: string | null;
+  lembrete_enviado_em?: string | null;
+};
+export async function getImoveis(busca = "") { return financeiroResposta(await fetch(`${API_URL}/imoveis?busca=${encodeURIComponent(busca)}`, { cache: "no-store" })) as Promise<Imovel[]>; }
+export async function criarImovel(dados: { titulo: string; tipo: string; endereco?: string; descricao?: string; valor_aluguel_centavos: number; taxa_condominio_centavos: number; cliente_id?: string; dia_vencimento?: number }) { return financeiroResposta(await fetch(`${API_URL}/imoveis`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dados) })) as Promise<Imovel>; }
+export async function enviarFotoImovel(id: string, foto: File) { const form = new FormData(); form.append("foto", foto); return financeiroResposta(await fetch(`${API_URL}/imoveis/${id}/foto`, { method: "POST", body: form })); }
+export async function excluirImovel(id: string) { return financeiroResposta(await fetch(`${API_URL}/imoveis/${id}`, { method: "DELETE" })); }
+export async function getCobrancas(mes: string) { return financeiroResposta(await fetch(`${API_URL}/cobrancas?mes=${mes}`, { cache: "no-store" })) as Promise<Cobranca[]>; }
+export async function criarCobranca(dados: { imovel_id: string; competencia: string; vencimento: string; valor_centavos?: number }) { return financeiroResposta(await fetch(`${API_URL}/cobrancas`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dados) })); }
+export async function marcarCobranca(id: string, status: "pendente" | "pago") { return financeiroResposta(await fetch(`${API_URL}/cobrancas/${id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) })); }
+export async function enviarLembreteCobranca(id: string) { return financeiroResposta(await fetch(`${API_URL}/cobrancas/${id}/enviar-lembrete`, { method: "POST" })); }

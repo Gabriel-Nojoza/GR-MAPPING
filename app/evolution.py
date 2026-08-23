@@ -52,3 +52,18 @@ def conectar() -> dict:
         _chamar("/instance/create", "POST", {"instanceName": instancia, "integration": "WHATSAPP-BAILEYS", "qrcode": True})
     resposta = _chamar(f"/instance/connect/{instancia}")
     return {"qrcode": resposta.get("base64"), "instancia": instancia}
+
+
+def enviar_texto(numero: str, texto: str) -> None:
+    """Envia uma mensagem de texto pela instÃ¢ncia conectada da imobiliÃ¡ria."""
+    _, _, instancia = _config()
+    digitos = "".join(caractere for caractere in numero if caractere.isdigit())
+    if len(digitos) < 10:
+        raise EvolutionError("O cliente nÃ£o possui um nÃºmero de WhatsApp vÃ¡lido.")
+    if len(digitos) in {10, 11}:
+        digitos = f"55{digitos}"
+    _chamar(
+        f"/message/sendText/{instancia}",
+        "POST",
+        {"number": digitos, "textMessage": {"text": texto}},
+    )

@@ -50,7 +50,7 @@ from app.ia_projeto import (
 )
 from app.jobs import Job, JobStatus, criar_job, obter_job
 from app.auth import credenciais_validas
-from app.evolution import EvolutionError, conectar as conectar_whatsapp, status as status_whatsapp
+from app.evolution import EvolutionError, conectar as conectar_whatsapp, enviar_texto as enviar_whatsapp, status as status_whatsapp
 
 app = FastAPI(title="Medição de Terreno API", version="0.1.0")
 db.init_db()
@@ -230,6 +230,28 @@ class ClienteDados(BaseModel):
     nome: str
     contato: str | None = None
     email: str | None = None
+
+
+class ImovelDados(BaseModel):
+    titulo: str
+    tipo: str
+    endereco: str | None = None
+    descricao: str | None = None
+    valor_aluguel_centavos: int
+    taxa_condominio_centavos: int = 0
+    cliente_id: str | None = None
+    dia_vencimento: int | None = None
+
+
+class CobrancaDados(BaseModel):
+    imovel_id: str
+    competencia: str
+    vencimento: str
+    valor_centavos: int | None = None
+
+
+class CobrancaStatus(BaseModel):
+    status: str
 
 
 
@@ -905,6 +927,141 @@ def excluir_cliente(cliente_id: str):
     if not db.excluir_cliente(cliente_id):
         raise HTTPException(status_code=404, detail="cliente não encontrado")
     return {"ok": True}
+
+
+# ----------------------------------------------------------------------
+# imÃ³veis e cobranÃ§as de aluguel
+# ----------------------------------------------------------------------
+def _imovel_resposta(linha) -> dict:
+    dados = dict(linha)
+    dados["valor_aluguel"] = dados.pop("valor_aluguel_centavos") / 100
+    dados["taxa_condominio"] = dados.pop("taxa_condominio_centavos") / 100
+    return dados
+
+
+def _cobranca_resposta(linha) -> dict:
+    dados = dict(linha)
+    dados["valor"] = dados.pop("valor_centavos") / 100
+    if dados["status"] == "pendente" and dados["vencimento"] < date.today().isoformat():
+        dados["status"] = "atrasado"
+    return dados
+
+
+@app.get("/imoveis")
+def listar_imoveis(busca: str | None = None):
+    return [_imovel_resposta(item) for item in db.listar_imoveis(busca)]
+
+
+@app.post("/imoveis")
+def criar_imovel(dados: ImovelDados):
+    if dados.tipo not in {"Casa", "Apartamento", "Sala comercial", "Kitnet", "Terreno", "GalpÃ£o", "Outro"}:
+        raise HTTPException(status_code=400, detail="tipo de imÃ³vel invÃ¡lido")
+    if not dados.titulo.strip() or dados.valor_aluguel_centavos <= 0:
+        raise HTTPException(status_code=400, detail="informe o nome do imÃ³vel e um valor de aluguel maior que zero")
+    if dados.dia_vencimento is not None and not 1 <= dados.dia_vencimento <= 31:
+        raise HTTPException(status_code=400, detail="o dia de vencimento deve estar entre 1 e 31")
+    if dados.cliente_id and not any(item["id"] == dados.cliente_id for item in db.listar_clientes()):
+        raise HTTPException(status_code=400, detail="cliente selecionado nÃ£o encontrado")
+    identificador = uuid.uuid4().hex
+    db.criar_imovel(
+        identificador, dados.titulo.strip(), dados.tipo, dados.endereco.strip() if dados.endereco else None,
+        dados.descricao.strip() if dados.descricao else None, dados.valor_aluguel_centavos,
+        max(0, dados.taxa_condominio_centavos), dados.cliente_id, dados.dia_vencimento, None, None,
+    )
+    return _imovel_resposta(db.obter_imovel(identificador))
+
+
+@app.post("/imoveis/{imovel_id}/foto")
+def enviar_foto_imovel(imovel_id: str, foto: UploadFile = File(...)):
+    if db.obter_imovel(imovel_id) is None:
+        raise HTTPException(status_code=404, detail="imÃ³vel nÃ£o encontrado")
+    if foto.content_type not in {"image/jpeg", "image/png", "image/webp"}:
+        raise HTTPException(status_code=400, detail="envie uma foto JPG, PNG ou WEBP")
+    dados = foto.file.read()
+    if not dados or len(dados) > 12 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="a foto deve ter no mÃ¡ximo 12 MB")
+    extensao = _extensao_por_mime(foto.content_type, ".jpg")
+    for anterior in UPLOADS_DIR.glob(f"imovel-{imovel_id}.*"):
+        anterior.unlink(missing_ok=True)
+    (UPLOADS_DIR / f"imovel-{imovel_id}{extensao}").write_bytes(dados)
+    with db._conectar() as conn:
+        conn.execute("UPDATE imoveis SET foto_nome = ?, foto_mime = ? WHERE id = ?", foto.filename or "foto do imÃ³vel", foto.content_type, imovel_id)
+    return {"ok": True}
+
+
+@app.get("/imoveis/{imovel_id}/foto")
+def foto_imovel(imovel_id: str):
+    imovel = db.obter_imovel(imovel_id)
+    caminho = next(iter(UPLOADS_DIR.glob(f"imovel-{imovel_id}.*")), None)
+    if imovel is None or caminho is None:
+        raise HTTPException(status_code=404, detail="foto do imÃ³vel nÃ£o encontrada")
+    return Response(content=caminho.read_bytes(), media_type=imovel["foto_mime"] or "image/jpeg")
+
+
+@app.delete("/imoveis/{imovel_id}")
+def excluir_imovel(imovel_id: str):
+    if not db.excluir_imovel(imovel_id):
+        raise HTTPException(status_code=404, detail="imÃ³vel nÃ£o encontrado")
+    for arquivo in UPLOADS_DIR.glob(f"imovel-{imovel_id}.*"):
+        arquivo.unlink(missing_ok=True)
+    return {"ok": True}
+
+
+@app.get("/cobrancas")
+def listar_cobrancas(mes: str | None = None):
+    return [_cobranca_resposta(item) for item in db.listar_cobrancas(mes)]
+
+
+@app.post("/cobrancas")
+def criar_cobranca(dados: CobrancaDados):
+    try:
+        competencia = date.fromisoformat(f"{dados.competencia}-01").strftime("%Y-%m")
+        date.fromisoformat(dados.vencimento)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="informe uma competÃªncia e vencimento vÃ¡lidos")
+    imovel = db.obter_imovel(dados.imovel_id)
+    if imovel is None or not imovel["cliente_id"]:
+        raise HTTPException(status_code=400, detail="selecione um imÃ³vel que esteja alugado a um cliente")
+    valor = dados.valor_centavos if dados.valor_centavos is not None else imovel["valor_aluguel_centavos"] + imovel["taxa_condominio_centavos"]
+    if valor <= 0:
+        raise HTTPException(status_code=400, detail="informe um valor maior que zero")
+    identificador = uuid.uuid4().hex
+    try:
+        db.criar_cobranca(identificador, imovel["id"], imovel["cliente_id"], competencia, dados.vencimento, valor)
+    except Exception as erro:
+        if "UNIQUE" in str(erro):
+            raise HTTPException(status_code=409, detail="jÃ¡ existe uma cobranÃ§a para este imÃ³vel nesta competÃªncia")
+        raise
+    return _cobranca_resposta(db.obter_cobranca(identificador))
+
+
+@app.patch("/cobrancas/{cobranca_id}/status")
+def atualizar_cobranca(cobranca_id: str, dados: CobrancaStatus):
+    if dados.status not in {"pendente", "pago"}:
+        raise HTTPException(status_code=400, detail="status deve ser pendente ou pago")
+    if not db.atualizar_status_cobranca(cobranca_id, dados.status):
+        raise HTTPException(status_code=404, detail="cobranÃ§a nÃ£o encontrada")
+    return {"ok": True}
+
+
+@app.post("/cobrancas/{cobranca_id}/enviar-lembrete")
+def enviar_lembrete_cobranca(cobranca_id: str):
+    linha = next((item for item in db.listar_cobrancas() if item["id"] == cobranca_id), None)
+    if linha is None:
+        raise HTTPException(status_code=404, detail="cobranÃ§a nÃ£o encontrada")
+    if linha["status"] == "pago":
+        raise HTTPException(status_code=400, detail="nÃ£o Ã© necessÃ¡rio cobrar um aluguel jÃ¡ pago")
+    texto = (
+        f"OlÃ¡, {linha['cliente_nome']}! Lembrete da imobiliÃ¡ria: o aluguel do imÃ³vel "
+        f"{linha['imovel_titulo']} vence em {date.fromisoformat(linha['vencimento']).strftime('%d/%m/%Y')}. "
+        f"Valor: R$ {linha['valor_centavos'] / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    )
+    try:
+        enviar_whatsapp(linha["cliente_contato"] or "", texto)
+        db.registrar_lembrete_cobranca(cobranca_id)
+    except EvolutionError as erro:
+        raise HTTPException(status_code=502, detail=str(erro))
+    return {"ok": True, "mensagem": texto}
 
 
 # ----------------------------------------------------------------------

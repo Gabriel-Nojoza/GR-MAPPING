@@ -88,6 +88,40 @@ def init_db() -> None:
                 tamanho_bytes INTEGER NOT NULL
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS imoveis (
+                id TEXT PRIMARY KEY,
+                criado_em TEXT NOT NULL,
+                titulo TEXT NOT NULL,
+                tipo TEXT NOT NULL,
+                endereco TEXT,
+                descricao TEXT,
+                valor_aluguel_centavos INTEGER NOT NULL,
+                taxa_condominio_centavos INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'disponivel',
+                cliente_id TEXT,
+                dia_vencimento INTEGER,
+                foto_nome TEXT,
+                foto_mime TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS cobrancas_aluguel (
+                id TEXT PRIMARY KEY,
+                criado_em TEXT NOT NULL,
+                imovel_id TEXT NOT NULL,
+                cliente_id TEXT NOT NULL,
+                competencia TEXT NOT NULL,
+                vencimento TEXT NOT NULL,
+                valor_centavos INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pendente',
+                pago_em TEXT,
+                lembrete_enviado_em TEXT,
+                FOREIGN KEY(imovel_id) REFERENCES imoveis(id),
+                FOREIGN KEY(cliente_id) REFERENCES clientes(id),
+                UNIQUE(imovel_id, competencia)
+            )
+        """)
         # migração leve: adiciona a coluna "nome" se o banco já existia sem ela
         colunas = {r["name"] for r in conn.execute("PRAGMA table_info(terrenos)")}
         if "nome" not in colunas:
@@ -334,4 +368,93 @@ def listar_documentos(busca: str | None = None) -> list[sqlite3.Row]:
 def excluir_documento(id_: str) -> bool:
     with _conectar() as conn:
         cur = conn.execute("DELETE FROM documentos WHERE id = ?", (id_,))
+        return cur.rowcount > 0
+
+
+# ----------------------------------------------------------------------
+# imÃ³veis e aluguÃ©is
+# ----------------------------------------------------------------------
+def criar_imovel(id_: str, titulo: str, tipo: str, endereco: str | None,
+                 descricao: str | None, valor_aluguel_centavos: int,
+                 taxa_condominio_centavos: int, cliente_id: str | None,
+                 dia_vencimento: int | None, foto_nome: str | None,
+                 foto_mime: str | None) -> None:
+    status = "alugado" if cliente_id else "disponivel"
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO imoveis (id, criado_em, titulo, tipo, endereco, descricao, "
+            "valor_aluguel_centavos, taxa_condominio_centavos, status, cliente_id, dia_vencimento, foto_nome, foto_mime) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (id_, _agora(), titulo, tipo, endereco, descricao, valor_aluguel_centavos,
+             taxa_condominio_centavos, status, cliente_id, dia_vencimento, foto_nome, foto_mime),
+        )
+
+
+def listar_imoveis(busca: str | None = None) -> list[sqlite3.Row]:
+    consulta = """
+        SELECT i.*, c.nome AS cliente_nome, c.contato AS cliente_contato
+        FROM imoveis i LEFT JOIN clientes c ON c.id = i.cliente_id
+    """
+    parametros: tuple = ()
+    if busca:
+        termo = f"%{busca.strip()}%"
+        consulta += " WHERE i.titulo LIKE ? OR i.endereco LIKE ? OR c.nome LIKE ?"
+        parametros = (termo, termo, termo)
+    consulta += " ORDER BY CASE i.status WHEN 'alugado' THEN 0 ELSE 1 END, i.criado_em DESC"
+    with _conectar() as conn:
+        return conn.execute(consulta, parametros).fetchall()
+
+
+def obter_imovel(id_: str) -> sqlite3.Row | None:
+    with _conectar() as conn:
+        return conn.execute("SELECT * FROM imoveis WHERE id = ?", (id_,)).fetchone()
+
+
+def excluir_imovel(id_: str) -> bool:
+    with _conectar() as conn:
+        cur = conn.execute("DELETE FROM imoveis WHERE id = ?", (id_,))
+        return cur.rowcount > 0
+
+
+def criar_cobranca(id_: str, imovel_id: str, cliente_id: str, competencia: str,
+                   vencimento: str, valor_centavos: int) -> None:
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO cobrancas_aluguel (id, criado_em, imovel_id, cliente_id, competencia, vencimento, valor_centavos, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 'pendente')",
+            (id_, _agora(), imovel_id, cliente_id, competencia, vencimento, valor_centavos),
+        )
+
+
+def listar_cobrancas(mes: str | None = None) -> list[sqlite3.Row]:
+    consulta = """
+        SELECT co.*, i.titulo AS imovel_titulo, c.nome AS cliente_nome, c.contato AS cliente_contato
+        FROM cobrancas_aluguel co
+        JOIN imoveis i ON i.id = co.imovel_id
+        JOIN clientes c ON c.id = co.cliente_id
+    """
+    parametros: tuple = ()
+    if mes:
+        consulta += " WHERE co.competencia = ?"
+        parametros = (mes,)
+    consulta += " ORDER BY co.vencimento ASC, co.criado_em DESC"
+    with _conectar() as conn:
+        return conn.execute(consulta, parametros).fetchall()
+
+
+def obter_cobranca(id_: str) -> sqlite3.Row | None:
+    with _conectar() as conn:
+        return conn.execute("SELECT * FROM cobrancas_aluguel WHERE id = ?", (id_,)).fetchone()
+
+
+def atualizar_status_cobranca(id_: str, status: str) -> bool:
+    with _conectar() as conn:
+        pago_em = _agora() if status == "pago" else None
+        cur = conn.execute("UPDATE cobrancas_aluguel SET status = ?, pago_em = ? WHERE id = ?", (status, pago_em, id_))
+        return cur.rowcount > 0
+
+
+def registrar_lembrete_cobranca(id_: str) -> bool:
+    with _conectar() as conn:
+        cur = conn.execute("UPDATE cobrancas_aluguel SET lembrete_enviado_em = ? WHERE id = ?", (_agora(), id_))
         return cur.rowcount > 0
