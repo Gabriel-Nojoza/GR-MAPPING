@@ -66,6 +66,14 @@ def _conectar() -> sqlite3.Connection | ConexaoPostgres:
     return conn
 
 
+def _valor_coluna(linha, nome: str, indice: int = 0):
+    """Lê uma coluna tanto de sqlite.Row quanto do dict retornado pelo Postgres."""
+    try:
+        return linha[nome]
+    except (KeyError, IndexError):
+        return linha[indice]
+
+
 def init_db() -> None:
     with _conectar() as conn:
         conn.execute("""
@@ -271,20 +279,22 @@ def listar_jobs(limite: int = 50) -> list[sqlite3.Row]:
 
 def resumo() -> dict:
     with _conectar() as conn:
-        total_terrenos, area_total_m2 = conn.execute(
-            "SELECT COUNT(*), COALESCE(SUM(area_m2), 0) FROM terrenos"
+        totais_terrenos = conn.execute(
+            "SELECT COUNT(*) AS total, COALESCE(SUM(area_m2), 0) AS area_total FROM terrenos"
         ).fetchone()
-        total_videos = conn.execute(
-            "SELECT COUNT(*) FROM jobs WHERE status = 'pronto'"
-        ).fetchone()[0]
-        videos_processando = conn.execute(
-            "SELECT COUNT(*) FROM jobs WHERE status = 'processando'"
-        ).fetchone()[0]
+        total_terrenos = _valor_coluna(totais_terrenos, "total", 0)
+        area_total_m2 = _valor_coluna(totais_terrenos, "area_total", 1)
+        total_videos = _valor_coluna(conn.execute(
+            "SELECT COUNT(*) AS total FROM jobs WHERE status = 'pronto'"
+        ).fetchone(), "total")
+        videos_processando = _valor_coluna(conn.execute(
+            "SELECT COUNT(*) AS total FROM jobs WHERE status = 'processando'"
+        ).fetchone(), "total")
 
         desde = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
-        terrenos_7dias = conn.execute(
-            "SELECT COUNT(*) FROM terrenos WHERE criado_em >= ?", (desde,)
-        ).fetchone()[0]
+        terrenos_7dias = _valor_coluna(conn.execute(
+            "SELECT COUNT(*) AS total FROM terrenos WHERE criado_em >= ?", (desde,)
+        ).fetchone(), "total")
 
         por_dia = conn.execute(
             "SELECT substr(criado_em, 1, 10) AS dia, COUNT(*) AS n "
@@ -292,7 +302,9 @@ def resumo() -> dict:
             (desde,),
         ).fetchall()
 
-        total_clientes = conn.execute("SELECT COUNT(*) FROM clientes").fetchone()[0]
+        total_clientes = _valor_coluna(
+            conn.execute("SELECT COUNT(*) AS total FROM clientes").fetchone(), "total"
+        )
         mes_atual = datetime.now(timezone.utc).strftime("%Y-%m")
         financeiro = conn.execute(
             "SELECT tipo, status, COALESCE(SUM(valor_centavos), 0) AS total "
