@@ -52,7 +52,7 @@ from app.ia_projeto import (
 from app.jobs import Job, JobStatus, criar_job, obter_job
 from app.auth import credenciais_validas, garantir_usuarios_iniciais
 from app.evolution import EvolutionError, conectar as conectar_whatsapp, enviar_texto as enviar_whatsapp, status as status_whatsapp
-from app.lembretes import processar_lembretes, rotina_diaria
+from app.lembretes import processar_lembretes, rotina_diaria, texto_lembrete
 
 app = FastAPI(title="Medição de Terreno API", version="0.1.0")
 db.init_db()
@@ -1095,11 +1095,7 @@ def enviar_lembrete_cobranca(cobranca_id: str):
         raise HTTPException(status_code=404, detail="cobranÃ§a nÃ£o encontrada")
     if linha["status"] == "pago":
         raise HTTPException(status_code=400, detail="nÃ£o Ã© necessÃ¡rio cobrar um aluguel jÃ¡ pago")
-    texto = (
-        f"OlÃ¡, {linha['cliente_nome']}! Lembrete da imobiliÃ¡ria: o aluguel do imÃ³vel "
-        f"{linha['imovel_titulo']} vence em {date.fromisoformat(linha['vencimento']).strftime('%d/%m/%Y')}. "
-        f"Valor: R$ {linha['valor_centavos'] / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    )
+    texto = texto_lembrete(linha)
     try:
         enviar_whatsapp(linha["cliente_contato"] or "", texto)
         db.registrar_lembrete_cobranca(cobranca_id)

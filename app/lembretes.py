@@ -1,4 +1,4 @@
-"""Rotina de lembretes automÃ¡ticos de aluguel via Evolution/WhatsApp."""
+"""Rotina de lembretes automáticos de aluguel via Evolution/WhatsApp."""
 from __future__ import annotations
 
 import asyncio
@@ -16,21 +16,37 @@ def _ativo() -> bool:
     return os.getenv("COBRANCA_LEMBRETES_AUTOMATICOS", "false").strip().lower() in {"1", "true", "sim", "yes"}
 
 
-def _texto(linha, tipo: str) -> str:
+def texto_lembrete(linha, tipo: str = "manual") -> str:
+    """Monta uma mensagem clara para envio manual ou automático de cobrança."""
     valor = f"{linha['valor_centavos'] / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     vencimento = date.fromisoformat(linha["vencimento"]).strftime("%d/%m/%Y")
-    inicio = f"Olá, {linha['cliente_nome']}! "
     if tipo == "antes_vencimento":
-        aviso = f"Seu aluguel do imóvel {linha['imovel_titulo']} vence em {vencimento}."
+        assunto = "Lembrete de vencimento próximo"
+        aviso = "Seu aluguel vence em breve."
+    elif tipo == "atraso":
+        assunto = "Lembrete de aluguel em aberto"
+        aviso = "Identificamos que este aluguel ainda consta em aberto."
     elif tipo == "vencimento":
-        aviso = f"Hoje vence o aluguel do imóvel {linha['imovel_titulo']}."
+        assunto = "Lembrete de vencimento hoje"
+        aviso = "Seu aluguel vence hoje."
     else:
-        aviso = f"O aluguel do imóvel {linha['imovel_titulo']} venceu em {vencimento} e ainda consta pendente."
-    return f"{inicio}{aviso} Valor: R$ {valor}. Em caso de pagamento, desconsidere esta mensagem."
+        assunto = "Lembrete de aluguel"
+        aviso = "Segue um lembrete sobre o seu aluguel."
+
+    return (
+        f"Olá, {linha['cliente_nome']}!\n\n"
+        f"*{assunto}*\n"
+        f"{aviso}\n\n"
+        f"🏠 *Imóvel:* {linha['imovel_titulo']}\n"
+        f"📅 *Vencimento:* {vencimento}\n"
+        f"💰 *Valor:* R$ {valor}\n\n"
+        "Caso o pagamento já tenha sido realizado, desconsidere esta mensagem. "
+        "Em caso de dúvidas, fale com a imobiliária."
+    )
 
 
 def processar_lembretes() -> int:
-    """Envia no mÃ¡ximo um lembrete de cada tipo por cobranÃ§a."""
+    """Envia no máximo um lembrete de cada tipo por cobrança."""
     if not _ativo():
         return 0
     hoje = date.today()
@@ -43,7 +59,7 @@ def processar_lembretes() -> int:
         if not tipo or db.lembrete_automatico_ja_enviado(linha["id"], tipo):
             continue
         try:
-            enviar_texto(linha["cliente_contato"] or "", _texto(linha, tipo))
+            enviar_texto(linha["cliente_contato"] or "", texto_lembrete(linha, tipo))
             db.registrar_lembrete_automatico(linha["id"], tipo)
             db.registrar_lembrete_cobranca(linha["id"])
             enviados += 1
@@ -53,7 +69,7 @@ def processar_lembretes() -> int:
 
 
 async def rotina_diaria() -> None:
-    """Roda uma vez ao dia no horÃ¡rio definido, sem exigir n8n."""
+    """Roda uma vez ao dia no horário definido, sem exigir n8n."""
     ultimo_dia: str | None = None
     while True:
         agora = __import__("datetime").datetime.now()
