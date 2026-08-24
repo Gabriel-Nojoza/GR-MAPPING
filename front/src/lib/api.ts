@@ -285,6 +285,3 @@ export async function importarVideoExterno(id: string, video: File) {
   const dados = new FormData(); dados.append("video", video);
   return financeiroResposta(await fetch(`${API_URL}/videos-salvos/${id}/importar`, { method: "POST", body: dados }));
 }
-export async function criarProjetoExterno(descricao: string) {
-  return financeiroResposta(await fetch(`${API_URL}/videos/externo`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ descricao }) })) as Promise<{ job_id: string }>;
-}

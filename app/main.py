@@ -255,10 +255,6 @@ class CobrancaStatus(BaseModel):
     status: str
 
 
-class ProjetoExternoDados(BaseModel):
-    descricao: str
-
-
 
 # ----------------------------------------------------------------------
 # helpers
@@ -688,17 +684,6 @@ def imagem_salva(job_id: str):
         raise HTTPException(status_code=404, detail="imagem salva não encontrada")
     mime = mimetypes.guess_type(caminho.name)[0] or "image/jpeg"
     return Response(content=caminho.read_bytes(), media_type=mime)
-
-
-@app.post("/videos/externo")
-def criar_projeto_externo(dados: ProjetoExternoDados):
-    """Cria uma pasta de projeto para receber um MP4 exportado de ferramenta externa."""
-    if not dados.descricao.strip():
-        raise HTTPException(status_code=400, detail="descreva o projeto antes de abrir o Google Flow")
-    identificador = uuid.uuid4().hex
-    db.registrar_job(identificador, f"[Flow] {dados.descricao.strip()}")
-    db.atualizar_status_job(identificador, "pronto")
-    return {"job_id": identificador}
 
 
 @app.get("/videos-salvos/{job_id}/video")
