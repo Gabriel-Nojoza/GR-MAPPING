@@ -16,14 +16,17 @@ from pathlib import Path
 
 try:
     import psycopg
+    from psycopg_pool import ConnectionPool
     from psycopg.rows import dict_row
 except ImportError:  # permite rodar a versÃ£o SQLite antes da primeira instalaÃ§Ã£o
     psycopg = None
+    ConnectionPool = None
     dict_row = None
 
 DB_PATH = Path(os.environ.get("MEDICAO_DB_PATH")
                 or Path(__file__).resolve().parent.parent / "dados.db")
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+_POOL_POSTGRES = None
 
 
 def _url_postgres() -> str:
@@ -36,20 +39,37 @@ def _url_postgres() -> str:
 class ConexaoPostgres:
     """Adaptador pequeno: mantÃ©m as consultas legadas SQLite compatÃ­veis com Postgres."""
     def __init__(self):
-        if psycopg is None:
+        if psycopg is None or ConnectionPool is None:
             raise RuntimeError("Driver PostgreSQL nÃ£o instalado. RefaÃ§a o build do container.")
-        self.conn = psycopg.connect(_url_postgres(), row_factory=dict_row)
+        self.conn = None
+        self._contexto = None
+
+    @staticmethod
+    def _pool():
+        global _POOL_POSTGRES
+        if _POOL_POSTGRES is None:
+            _POOL_POSTGRES = ConnectionPool(
+                conninfo=_url_postgres(),
+                kwargs={"row_factory": dict_row},
+                min_size=1,
+                max_size=5,
+                open=True,
+            )
+        return _POOL_POSTGRES
 
     def execute(self, sql: str, parametros=()):
+        if self.conn is None:
+            raise RuntimeError("Conexão com o banco não foi aberta.")
         sql = sql.replace("?", "%s").replace(" COLLATE NOCASE", "")
         return self.conn.execute(sql, parametros)
 
     def __enter__(self):
-        self.conn.__enter__()
+        self._contexto = self._pool().connection()
+        self.conn = self._contexto.__enter__()
         return self
 
     def __exit__(self, *args):
-        return self.conn.__exit__(*args)
+        return self._contexto.__exit__(*args)
 
 _STATUS_ROTULO = {
     "processando": "Vídeo em processamento",

@@ -7,3 +7,4 @@ shapely
 google-genai
 python-dotenv
 psycopg[binary]
+psycopg-pool
