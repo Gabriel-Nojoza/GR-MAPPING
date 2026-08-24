@@ -32,7 +32,7 @@ const ITEMS = [
   { href: "/clientes", icon: Users, label: "Clientes" },
   { href: "/imoveis", icon: Building2, label: "Imóveis" },
   { href: "/financeiro", icon: WalletCards, label: "Financeiro" },
-  { href: "/cobrancas", icon: ReceiptText, label: "CobranÃ§as" },
+  { href: "/cobrancas", icon: ReceiptText, label: "Cobranças" },
   { href: "/documentos", icon: FolderArchive, label: "Documentos" },
   { href: "/gerar-projeto", icon: Sparkles, label: "Gerar Projeto IA" },
   { href: "/configuracoes", icon: Settings, label: "Configurações" },
