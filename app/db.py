@@ -535,9 +535,10 @@ def listar_imoveis(busca: str | None = None) -> list[sqlite3.Row]:
         FROM imoveis i LEFT JOIN clientes c ON c.id = i.cliente_id
     """
     parametros: tuple = ()
+    consulta += " WHERE i.status <> 'arquivado'"
     if busca:
         termo = f"%{busca.strip()}%"
-        consulta += " WHERE i.titulo LIKE ? OR i.endereco LIKE ? OR c.nome LIKE ?"
+        consulta += " AND (i.titulo LIKE ? OR i.endereco LIKE ? OR c.nome LIKE ?)"
         parametros = (termo, termo, termo)
     consulta += " ORDER BY CASE i.status WHEN 'alugado' THEN 0 ELSE 1 END, i.criado_em DESC"
     with _conectar() as conn:
@@ -551,7 +552,8 @@ def obter_imovel(id_: str) -> sqlite3.Row | None:
 
 def excluir_imovel(id_: str) -> bool:
     with _conectar() as conn:
-        cur = conn.execute("DELETE FROM imoveis WHERE id = ?", (id_,))
+        # Mantém as cobranças e seus vínculos para não perder o histórico financeiro.
+        cur = conn.execute("UPDATE imoveis SET status = 'arquivado' WHERE id = ? AND status <> 'arquivado'", (id_,))
         return cur.rowcount > 0
 
 
