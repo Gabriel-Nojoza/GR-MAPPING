@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from calendar import monthrange
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -547,6 +548,36 @@ def criar_cobranca(id_: str, imovel_id: str, cliente_id: str, competencia: str,
             "VALUES (?, ?, ?, ?, ?, ?, ?, 'pendente')",
             (id_, _agora(), imovel_id, cliente_id, competencia, vencimento, valor_centavos),
         )
+
+
+def garantir_cobrancas_do_mes(competencia: str) -> None:
+    """Cria uma cobrança mensal por imóvel alugado, respeitando seu dia de vencimento."""
+    ano, mes = (int(parte) for parte in competencia.split("-", 1))
+    ultimo_dia = monthrange(ano, mes)[1]
+    with _conectar() as conn:
+        alugados = conn.execute(
+            "SELECT id, cliente_id, dia_vencimento, valor_aluguel_centavos, taxa_condominio_centavos "
+            "FROM imoveis WHERE status = 'alugado' AND cliente_id IS NOT NULL"
+        ).fetchall()
+        for imovel in alugados:
+            dia = min(max(int(imovel["dia_vencimento"] or 1), 1), ultimo_dia)
+            valores = (
+                os.urandom(16).hex(), _agora(), imovel["id"], imovel["cliente_id"], competencia,
+                f"{competencia}-{dia:02d}",
+                int(imovel["valor_aluguel_centavos"]) + int(imovel["taxa_condominio_centavos"] or 0),
+            )
+            if DATABASE_URL:
+                conn.execute(
+                    "INSERT INTO cobrancas_aluguel (id, criado_em, imovel_id, cliente_id, competencia, vencimento, valor_centavos, status) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, 'pendente') ON CONFLICT (imovel_id, competencia) DO NOTHING",
+                    valores,
+                )
+            else:
+                conn.execute(
+                    "INSERT OR IGNORE INTO cobrancas_aluguel (id, criado_em, imovel_id, cliente_id, competencia, vencimento, valor_centavos, status) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, 'pendente')",
+                    valores,
+                )
 
 
 def listar_cobrancas(mes: str | None = None) -> list[sqlite3.Row]:

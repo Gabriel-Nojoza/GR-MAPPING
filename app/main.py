@@ -1047,6 +1047,12 @@ def excluir_imovel(imovel_id: str):
 
 @app.get("/cobrancas")
 def listar_cobrancas(mes: str | None = None):
+    if mes:
+        try:
+            competencia = date.fromisoformat(f"{mes}-01").strftime("%Y-%m")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="informe uma competência válida")
+        db.garantir_cobrancas_do_mes(competencia)
     return [_cobranca_resposta(item) for item in db.listar_cobrancas(mes)]
 
 

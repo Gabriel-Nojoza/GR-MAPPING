@@ -65,5 +65,6 @@ def enviar_texto(numero: str, texto: str) -> None:
     _chamar(
         f"/message/sendText/{instancia}",
         "POST",
-        {"number": digitos, "textMessage": {"text": texto}},
+        # Evolution API 2.x recebe o texto diretamente no campo `text`.
+        {"number": digitos, "text": texto},
     )

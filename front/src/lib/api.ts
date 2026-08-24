@@ -237,7 +237,14 @@ export type LancamentoFinanceiro = {
 export type ResumoFinanceiro = { receitas_pagas: number; despesas_pagas: number; saldo: number; a_receber: number; a_pagar: number; atrasados: number };
 
 async function financeiroResposta(res: Response) {
-  if (!res.ok) { const erro = await res.json().catch(() => null); throw new Error(erro?.detail ?? "Erro financeiro"); }
+  if (!res.ok) {
+    const erro = await res.json().catch(() => null);
+    const detalhe = erro?.detail;
+    const mensagem = Array.isArray(detalhe)
+      ? detalhe.map((item) => item.msg ?? "Dados inválidos").join(". ")
+      : detalhe ?? "Erro ao processar a solicitação";
+    throw new Error(mensagem);
+  }
   return res.json();
 }
 
