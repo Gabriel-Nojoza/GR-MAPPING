@@ -280,8 +280,3 @@ export async function getCobrancas(mes: string) { return financeiroResposta(awai
 export async function criarCobranca(dados: { imovel_id: string; competencia: string; vencimento: string; valor_centavos?: number }) { return financeiroResposta(await fetch(`${API_URL}/cobrancas`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dados) })); }
 export async function marcarCobranca(id: string, status: "pendente" | "pago") { return financeiroResposta(await fetch(`${API_URL}/cobrancas/${id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) })); }
 export async function enviarLembreteCobranca(id: string) { return financeiroResposta(await fetch(`${API_URL}/cobrancas/${id}/enviar-lembrete`, { method: "POST" })); }
-
-export async function importarVideoExterno(id: string, video: File) {
-  const dados = new FormData(); dados.append("video", video);
-  return financeiroResposta(await fetch(`${API_URL}/videos-salvos/${id}/importar`, { method: "POST", body: dados }));
-}
