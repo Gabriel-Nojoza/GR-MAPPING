@@ -535,8 +535,9 @@ def _rodar_geracao(job: Job, foto_bytes: bytes, foto_mime: str, descricao: str,
         job.imagem_bytes, job.imagem_mime = imagem_bytes, imagem_mime
         _salvar_arquivo_projeto(job.id, "imagem", imagem_bytes, imagem_mime)
 
-        video_bytes, video_mime = gerar_video_local(imagem_bytes, imagem_mime)
+        video_bytes, video_mime, video_obj = gerar_video_projeto(imagem_bytes, imagem_mime, descricao)
         job.video_bytes, job.video_mime = video_bytes, video_mime
+        job.video_obj = video_obj
         _salvar_arquivo_projeto(job.id, "video", video_bytes, video_mime)
         job.duracao_total_s = job.duracao_total_s or 8
 

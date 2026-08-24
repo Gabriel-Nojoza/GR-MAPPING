@@ -172,10 +172,10 @@ export default function GerarProjeto() {
         <div>
           <p className="text-sm font-medium text-primary">Criação assistida</p>
           <h1 className="mt-1 text-2xl font-semibold text-slate-900">Gerar projeto IA</h1>
-          <p className="mt-1 text-sm text-slate-500">A IA cria a imagem da casa e a VPS monta o vídeo, sem custo de vídeo por crédito.</p>
+          <p className="mt-1 text-sm text-slate-500">Gere uma visualização imobiliária em vídeo real com IA, a partir da foto do terreno.</p>
         </div>
         <div className="flex items-center gap-2 rounded-full bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">
-          <Sparkles size={15} /> Imagem IA + vídeo econômico
+          <Sparkles size={15} /> Vídeo real com IA
         </div>
       </div>
 
@@ -244,20 +244,16 @@ export default function GerarProjeto() {
           <p className="mt-2 text-xs text-slate-400">A foto do terreno continua sendo a referência principal de posição e proporção.</p>
           <Button onClick={enviar} disabled={gerando} className="mt-5 w-full">
             {gerando ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-            {gerando ? "Criando imagem e vídeo..." : "Gerar projeto"}
+            {gerando ? "Gerando vídeo real..." : "Gerar vídeo"}
           </Button>
-          {status === "processando" && <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">A imagem está sendo criada pela IA. Em seguida, a VPS prepara o vídeo automaticamente.</p>}
+          {status === "processando" && <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">A IA está criando o vídeo. Esse processo pode levar alguns minutos.</p>}
           {erro && <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</p>}
         </Card>
       </div>
 
       {status === "pronto" && jobId && <Card className="mt-6 p-5 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold text-slate-900">Projeto pronto</h2><p className="text-sm text-slate-500">Imagem criada por IA e vídeo de {duracaoTotal}s montado na VPS.</p></div><a href={`${API_URL}/videos-salvos/${jobId}/download`} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-primary-hover"><Download size={16} /> Baixar MP4</a></div>
-        <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={`${API_URL}/gerar-projeto/${jobId}/imagem`} alt="Projeto gerado" className="w-full rounded-xl border border-slate-200" />
-          <video key={duracaoTotal} src={`${API_URL}/gerar-projeto/${jobId}/video?v=${duracaoTotal}`} controls className="w-full rounded-xl border border-slate-200" />
-        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold text-slate-900">Vídeo pronto</h2><p className="text-sm text-slate-500">Visualização em vídeo real gerada por IA ({duracaoTotal}s).</p></div><a href={`${API_URL}/videos-salvos/${jobId}/download`} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-primary-hover"><Download size={16} /> Baixar MP4</a></div>
+        <video key={duracaoTotal} src={`${API_URL}/gerar-projeto/${jobId}/video?v=${duracaoTotal}`} controls className="mt-5 w-full rounded-xl border border-slate-200" />
         {podeEstender && <Button variant="secondary" onClick={estender} className="mt-5">Estender vídeo (+7s)</Button>}
       </Card>}
 
