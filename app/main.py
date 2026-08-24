@@ -20,6 +20,7 @@ import json
 import math
 import mimetypes
 import os
+import asyncio
 import tempfile
 import uuid
 from datetime import date
@@ -51,10 +52,16 @@ from app.ia_projeto import (
 from app.jobs import Job, JobStatus, criar_job, obter_job
 from app.auth import credenciais_validas, garantir_usuarios_iniciais
 from app.evolution import EvolutionError, conectar as conectar_whatsapp, enviar_texto as enviar_whatsapp, status as status_whatsapp
+from app.lembretes import processar_lembretes, rotina_diaria
 
 app = FastAPI(title="Medição de Terreno API", version="0.1.0")
 db.init_db()
 garantir_usuarios_iniciais()
+
+
+@app.on_event("startup")
+async def iniciar_rotina_cobrancas():
+    asyncio.create_task(rotina_diaria())
 
 # libera o front (em produção, troque "*" pelo domínio do seu app)
 origens_permitidas = [
@@ -231,6 +238,11 @@ class ClienteDados(BaseModel):
     nome: str
     contato: str | None = None
     email: str | None = None
+    whatsapp_cobranca_ativo: bool = False
+
+
+class ClienteWhatsappDados(BaseModel):
+    whatsapp_cobranca_ativo: bool
 
 
 class ImovelDados(BaseModel):
@@ -910,6 +922,17 @@ def excluir_financeiro(lancamento_id: str):
 # ----------------------------------------------------------------------
 # clientes
 # ----------------------------------------------------------------------
+def _normalizar_whatsapp(numero: str | None) -> str | None:
+    if not numero:
+        return None
+    digitos = "".join(caractere for caractere in numero if caractere.isdigit())
+    if len(digitos) in {10, 11}:
+        digitos = f"55{digitos}"
+    if len(digitos) < 12 or len(digitos) > 13 or not digitos.startswith("55"):
+        raise HTTPException(status_code=400, detail="informe um WhatsApp brasileiro válido, com DDD")
+    return digitos
+
+
 @app.get("/clientes")
 def listar_clientes(busca: str | None = None):
     return [dict(item) for item in db.listar_clientes(busca)]
@@ -919,9 +942,23 @@ def listar_clientes(busca: str | None = None):
 def criar_cliente(dados: ClienteDados):
     if not dados.nome.strip():
         raise HTTPException(status_code=400, detail="informe o nome do cliente")
+    contato = _normalizar_whatsapp(dados.contato) if dados.contato else None
+    if dados.whatsapp_cobranca_ativo and not contato:
+        raise HTTPException(status_code=400, detail="informe o WhatsApp para ativar lembretes de cobrança")
     identificador = uuid.uuid4().hex
-    db.criar_cliente(identificador, dados.nome.strip(), dados.contato.strip() if dados.contato else None, dados.email.strip() if dados.email else None)
+    db.criar_cliente(identificador, dados.nome.strip(), contato, dados.email.strip() if dados.email else None, dados.whatsapp_cobranca_ativo)
     return next(dict(item) for item in db.listar_clientes() if item["id"] == identificador)
+
+
+@app.patch("/clientes/{cliente_id}/whatsapp-cobranca")
+def atualizar_whatsapp_cobranca(cliente_id: str, dados: ClienteWhatsappDados):
+    cliente = next((item for item in db.listar_clientes() if item["id"] == cliente_id), None)
+    if cliente is None:
+        raise HTTPException(status_code=404, detail="cliente não encontrado")
+    if dados.whatsapp_cobranca_ativo and not cliente["contato"]:
+        raise HTTPException(status_code=400, detail="cadastre um WhatsApp válido no cliente antes de ativar os lembretes")
+    db.atualizar_whatsapp_cobranca_cliente(cliente_id, dados.whatsapp_cobranca_ativo)
+    return {"ok": True}
 
 
 @app.delete("/clientes/{cliente_id}")
@@ -1063,6 +1100,11 @@ def enviar_lembrete_cobranca(cobranca_id: str):
     except EvolutionError as erro:
         raise HTTPException(status_code=502, detail=str(erro))
     return {"ok": True, "mensagem": texto}
+
+
+@app.post("/cobrancas/processar-lembretes")
+def processar_lembretes_agora():
+    return {"enviados": processar_lembretes()}
 
 
 # ----------------------------------------------------------------------

@@ -247,9 +247,10 @@ export async function criarLancamento(dados: { tipo: "receita" | "despesa"; desc
 export async function marcarLancamento(id: string, status: "pendente" | "pago") { return financeiroResposta(await fetch(`${API_URL}/financeiro/${id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) })); }
 export async function excluirLancamento(id: string) { return financeiroResposta(await fetch(`${API_URL}/financeiro/${id}`, { method: "DELETE" })); }
 
-export type Cliente = { id: string; criado_em: string; nome: string; contato?: string | null; email?: string | null };
+export type Cliente = { id: string; criado_em: string; nome: string; contato?: string | null; email?: string | null; whatsapp_cobranca_ativo: boolean };
 export async function getClientes(busca = "") { const res = await fetch(`${API_URL}/clientes?busca=${encodeURIComponent(busca)}`, { cache: "no-store" }); return financeiroResposta(res) as Promise<Cliente[]>; }
-export async function criarCliente(dados: { nome: string; contato?: string; email?: string }) { return financeiroResposta(await fetch(`${API_URL}/clientes`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dados) })); }
+export async function criarCliente(dados: { nome: string; contato?: string; email?: string; whatsapp_cobranca_ativo?: boolean }) { return financeiroResposta(await fetch(`${API_URL}/clientes`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dados) })); }
+export async function atualizarWhatsappCobrancaCliente(id: string, ativo: boolean) { return financeiroResposta(await fetch(`${API_URL}/clientes/${id}/whatsapp-cobranca`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ whatsapp_cobranca_ativo: ativo }) })); }
 export async function excluirCliente(id: string) { return financeiroResposta(await fetch(`${API_URL}/clientes/${id}`, { method: "DELETE" })); }
 
 export type Documento = { id: string; criado_em: string; titulo: string; categoria: string; nome_arquivo: string; mime?: string | null; tamanho_bytes: number };

@@ -108,9 +108,10 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS clientes (
                 id TEXT PRIMARY KEY,
                 criado_em TEXT NOT NULL,
-                nome TEXT NOT NULL,
-                contato TEXT,
-                email TEXT
+            nome TEXT NOT NULL,
+            contato TEXT,
+            email TEXT,
+            whatsapp_cobranca_ativo INTEGER NOT NULL DEFAULT 0
             )
         """)
         conn.execute("""
@@ -168,6 +169,16 @@ def init_db() -> None:
                 UNIQUE(imovel_id, competencia)
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS cobranca_lembretes (
+                id TEXT PRIMARY KEY,
+                cobranca_id TEXT NOT NULL,
+                tipo TEXT NOT NULL,
+                enviado_em TEXT NOT NULL,
+                UNIQUE(cobranca_id, tipo),
+                FOREIGN KEY(cobranca_id) REFERENCES cobrancas_aluguel(id)
+            )
+        """)
         # migração leve: adiciona a coluna "nome" se o banco já existia sem ela
         if DATABASE_URL:
             colunas = {r["column_name"] for r in conn.execute(
@@ -179,6 +190,15 @@ def init_db() -> None:
             conn.execute("ALTER TABLE terrenos ADD COLUMN nome TEXT")
         if "pontos_json" not in colunas:
             conn.execute("ALTER TABLE terrenos ADD COLUMN pontos_json TEXT")
+
+        if DATABASE_URL:
+            colunas_clientes = {r["column_name"] for r in conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = %s", ("clientes",)
+            )}
+        else:
+            colunas_clientes = {r["name"] for r in conn.execute("PRAGMA table_info(clientes)")}
+        if "whatsapp_cobranca_ativo" not in colunas_clientes:
+            conn.execute("ALTER TABLE clientes ADD COLUMN whatsapp_cobranca_ativo INTEGER NOT NULL DEFAULT 0")
 
         # migração leve: agrupamento de jobs que fazem parte da mesma
         # "evolução da obra" (várias etapas geradas a partir de uma descrição)
@@ -380,10 +400,11 @@ def excluir_lancamento(id_: str) -> bool:
         return cur.rowcount > 0
 
 
-def criar_cliente(id_: str, nome: str, contato: str | None, email: str | None) -> None:
+def criar_cliente(id_: str, nome: str, contato: str | None, email: str | None,
+                  whatsapp_cobranca_ativo: bool = False) -> None:
     with _conectar() as conn:
-        conn.execute("INSERT INTO clientes (id, criado_em, nome, contato, email) VALUES (?, ?, ?, ?, ?)",
-                     (id_, _agora(), nome, contato, email))
+        conn.execute("INSERT INTO clientes (id, criado_em, nome, contato, email, whatsapp_cobranca_ativo) VALUES (?, ?, ?, ?, ?, ?)",
+                     (id_, _agora(), nome, contato, email, int(whatsapp_cobranca_ativo)))
 
 
 def listar_clientes(busca: str | None = None) -> list[sqlite3.Row]:
@@ -400,6 +421,12 @@ def listar_clientes(busca: str | None = None) -> list[sqlite3.Row]:
 def excluir_cliente(id_: str) -> bool:
     with _conectar() as conn:
         cur = conn.execute("DELETE FROM clientes WHERE id = ?", (id_,))
+        return cur.rowcount > 0
+
+
+def atualizar_whatsapp_cobranca_cliente(id_: str, ativo: bool) -> bool:
+    with _conectar() as conn:
+        cur = conn.execute("UPDATE clientes SET whatsapp_cobranca_ativo = ? WHERE id = ?", (int(ativo), id_))
         return cur.rowcount > 0
 
 
@@ -512,7 +539,8 @@ def criar_cobranca(id_: str, imovel_id: str, cliente_id: str, competencia: str,
 
 def listar_cobrancas(mes: str | None = None) -> list[sqlite3.Row]:
     consulta = """
-        SELECT co.*, i.titulo AS imovel_titulo, c.nome AS cliente_nome, c.contato AS cliente_contato
+        SELECT co.*, i.titulo AS imovel_titulo, c.nome AS cliente_nome, c.contato AS cliente_contato,
+               c.whatsapp_cobranca_ativo AS cliente_whatsapp_cobranca_ativo
         FROM cobrancas_aluguel co
         JOIN imoveis i ON i.id = co.imovel_id
         JOIN clientes c ON c.id = co.cliente_id
@@ -542,3 +570,16 @@ def registrar_lembrete_cobranca(id_: str) -> bool:
     with _conectar() as conn:
         cur = conn.execute("UPDATE cobrancas_aluguel SET lembrete_enviado_em = ? WHERE id = ?", (_agora(), id_))
         return cur.rowcount > 0
+
+
+def lembrete_automatico_ja_enviado(cobranca_id: str, tipo: str) -> bool:
+    with _conectar() as conn:
+        return conn.execute("SELECT 1 FROM cobranca_lembretes WHERE cobranca_id = ? AND tipo = ?", (cobranca_id, tipo)).fetchone() is not None
+
+
+def registrar_lembrete_automatico(cobranca_id: str, tipo: str) -> None:
+    with _conectar() as conn:
+        if DATABASE_URL:
+            conn.execute("INSERT INTO cobranca_lembretes (id, cobranca_id, tipo, enviado_em) VALUES (?, ?, ?, ?) ON CONFLICT (cobranca_id, tipo) DO NOTHING", (os.urandom(16).hex(), cobranca_id, tipo, _agora()))
+        else:
+            conn.execute("INSERT OR IGNORE INTO cobranca_lembretes (id, cobranca_id, tipo, enviado_em) VALUES (?, ?, ?, ?)", (os.urandom(16).hex(), cobranca_id, tipo, _agora()))
