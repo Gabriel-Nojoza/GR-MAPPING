@@ -89,7 +89,12 @@ export async function excluirUsuarioEmpresa(id: string): Promise<void> {
   }));
 }
 
-export type LeadEncontrado = { place_id?: string; nome: string; endereco?: string | null; tipo?: string | null; situacao?: string | null; google_maps_url?: string | null; };
+export type LeadEncontrado = { place_id?: string; nome: string; endereco?: string | null; telefone?: string | null; tipo?: string | null; situacao?: string | null; google_maps_url?: string | null; };
 export async function pesquisarLeads(dados: { cidade: string; segmento: string; limite?: number }): Promise<LeadEncontrado[]> {
   return respostaAdmin(await fetch(`${API_URL}/admin/leads/pesquisar`, { method: "POST", headers: cabecalhos(), body: JSON.stringify(dados) }));
 }
+
+export type ModeloMensagemLead = { id: string; criado_em: string; titulo: string; conteudo: string; };
+export async function listarModelosMensagemLead(): Promise<ModeloMensagemLead[]> { return respostaAdmin(await fetch(`${API_URL}/admin/leads/modelos`, { headers: cabecalhos(), cache: "no-store" })); }
+export async function criarModeloMensagemLead(dados: { titulo: string; conteudo: string }): Promise<ModeloMensagemLead> { return respostaAdmin(await fetch(`${API_URL}/admin/leads/modelos`, { method: "POST", headers: cabecalhos(), body: JSON.stringify(dados) })); }
+export async function excluirModeloMensagemLead(id: string): Promise<void> { await respostaAdmin(await fetch(`${API_URL}/admin/leads/modelos/${id}`, { method: "DELETE", headers: cabecalhos() })); }

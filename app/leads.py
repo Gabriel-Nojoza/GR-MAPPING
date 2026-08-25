@@ -10,7 +10,7 @@ from fastapi import HTTPException
 
 
 _URL_TEXT_SEARCH = "https://places.googleapis.com/v1/places:searchText"
-_FIELD_MASK = ",".join(("places.id", "places.displayName", "places.formattedAddress", "places.googleMapsUri", "places.primaryTypeDisplayName", "places.businessStatus"))
+_FIELD_MASK = ",".join(("places.id", "places.displayName", "places.formattedAddress", "places.internationalPhoneNumber", "places.googleMapsUri", "places.primaryTypeDisplayName", "places.businessStatus"))
 
 
 def pesquisar_leads(cidade: str, segmento: str, limite: int = 20) -> list[dict]:
@@ -40,7 +40,7 @@ def pesquisar_leads(cidade: str, segmento: str, limite: int = 20) -> list[dict]:
         except URLError:
             raise HTTPException(status_code=502, detail="Não foi possível conectar ao Google Places.")
         for local in dados.get("places", []):
-            resultados.append({"place_id": local.get("id"), "nome": (local.get("displayName") or {}).get("text") or "Sem nome", "endereco": local.get("formattedAddress"), "tipo": (local.get("primaryTypeDisplayName") or {}).get("text"), "situacao": local.get("businessStatus"), "google_maps_url": local.get("googleMapsUri")})
+            resultados.append({"place_id": local.get("id"), "nome": (local.get("displayName") or {}).get("text") or "Sem nome", "endereco": local.get("formattedAddress"), "telefone": local.get("internationalPhoneNumber"), "tipo": (local.get("primaryTypeDisplayName") or {}).get("text"), "situacao": local.get("businessStatus"), "google_maps_url": local.get("googleMapsUri")})
         token_pagina = dados.get("nextPageToken")
         if not token_pagina or not dados.get("places"):
             break

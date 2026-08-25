@@ -121,6 +121,11 @@ class BuscaLeadsDados(BaseModel):
     limite: int = 20
 
 
+class ModeloMensagemLeadDados(BaseModel):
+    titulo: str
+    conteudo: str
+
+
 @app.post("/auth/login")
 def login(dados: LoginDados):
     """Confere as credenciais informadas na tela de login."""
@@ -1010,6 +1015,28 @@ def admin_pesquisar_leads(dados: BuscaLeadsDados, _: dict = Depends(exigir_super
     if len(cidade) < 2:
         raise HTTPException(status_code=400, detail="Informe uma cidade ou região para pesquisar.")
     return pesquisar_leads(cidade, segmento, dados.limite)
+
+
+@app.get("/admin/leads/modelos")
+def admin_listar_modelos_leads(_: dict = Depends(exigir_superadmin)):
+    return [dict(item) for item in db.listar_modelos_mensagem_leads()]
+
+
+@app.post("/admin/leads/modelos")
+def admin_criar_modelo_lead(dados: ModeloMensagemLeadDados, _: dict = Depends(exigir_superadmin)):
+    titulo, conteudo = dados.titulo.strip(), dados.conteudo.strip()
+    if not titulo or not conteudo:
+        raise HTTPException(status_code=400, detail="Informe o título e a mensagem do modelo.")
+    identificador = uuid.uuid4().hex
+    db.criar_modelo_mensagem_lead(identificador, titulo, conteudo)
+    return next(dict(item) for item in db.listar_modelos_mensagem_leads() if item["id"] == identificador)
+
+
+@app.delete("/admin/leads/modelos/{modelo_id}")
+def admin_excluir_modelo_lead(modelo_id: str, _: dict = Depends(exigir_superadmin)):
+    if not db.excluir_modelo_mensagem_lead(modelo_id):
+        raise HTTPException(status_code=404, detail="Modelo não encontrado.")
+    return {"ok": True}
 
 
 @app.post("/admin/empresas")

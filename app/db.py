@@ -220,6 +220,14 @@ def init_db() -> None:
                 FOREIGN KEY(cobranca_id) REFERENCES cobrancas_aluguel(id)
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS modelos_mensagem_leads (
+                id TEXT PRIMARY KEY,
+                criado_em TEXT NOT NULL,
+                titulo TEXT NOT NULL,
+                conteudo TEXT NOT NULL
+            )
+        """)
         # migração leve: adiciona a coluna "nome" se o banco já existia sem ela
         if DATABASE_URL:
             colunas = {r["column_name"] for r in conn.execute(
@@ -499,6 +507,30 @@ def excluir_cliente(id_: str) -> bool:
 def atualizar_whatsapp_cobranca_cliente(id_: str, ativo: bool) -> bool:
     with _conectar() as conn:
         cur = conn.execute("UPDATE clientes SET whatsapp_cobranca_ativo = ? WHERE id = ?", (int(ativo), id_))
+        return cur.rowcount > 0
+
+
+# ----------------------------------------------------------------------
+# modelos de mensagem para prospecção de leads
+# ----------------------------------------------------------------------
+def listar_modelos_mensagem_leads() -> list[sqlite3.Row]:
+    with _conectar() as conn:
+        return conn.execute(
+            "SELECT * FROM modelos_mensagem_leads ORDER BY criado_em ASC"
+        ).fetchall()
+
+
+def criar_modelo_mensagem_lead(id_: str, titulo: str, conteudo: str) -> None:
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO modelos_mensagem_leads (id, criado_em, titulo, conteudo) VALUES (?, ?, ?, ?)",
+            (id_, _agora(), titulo, conteudo),
+        )
+
+
+def excluir_modelo_mensagem_lead(id_: str) -> bool:
+    with _conectar() as conn:
+        cur = conn.execute("DELETE FROM modelos_mensagem_leads WHERE id = ?", (id_,))
         return cur.rowcount > 0
 
 
