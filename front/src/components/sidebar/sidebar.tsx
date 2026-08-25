@@ -44,6 +44,8 @@ export function Sidebar() {
 
   function sair() {
     sessionStorage.removeItem("medicao-terreno:acesso");
+    sessionStorage.removeItem("medicao-terreno:token");
+    sessionStorage.removeItem("medicao-terreno:usuario");
     router.replace("/login");
   }
 

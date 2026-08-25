@@ -144,13 +144,25 @@ def init_db() -> None:
             )
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS empresas (
+                id TEXT PRIMARY KEY,
+                criado_em TEXT NOT NULL,
+                nome TEXT NOT NULL,
+                cnpj TEXT,
+                plano TEXT NOT NULL DEFAULT 'teste',
+                status TEXT NOT NULL DEFAULT 'ativo'
+            )
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS usuarios (
                 id TEXT PRIMARY KEY,
                 criado_em TEXT NOT NULL,
                 email TEXT NOT NULL UNIQUE,
                 nome TEXT,
                 senha_hash TEXT NOT NULL,
-                ativo INTEGER NOT NULL DEFAULT 1
+                ativo INTEGER NOT NULL DEFAULT 1,
+                perfil TEXT NOT NULL DEFAULT 'imobiliaria',
+                empresa_id TEXT
             )
         """)
         conn.execute("""
@@ -228,6 +240,17 @@ def init_db() -> None:
             colunas_clientes = {r["name"] for r in conn.execute("PRAGMA table_info(clientes)")}
         if "whatsapp_cobranca_ativo" not in colunas_clientes:
             conn.execute("ALTER TABLE clientes ADD COLUMN whatsapp_cobranca_ativo INTEGER NOT NULL DEFAULT 0")
+
+        if DATABASE_URL:
+            colunas_usuarios = {r["column_name"] for r in conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = %s", ("usuarios",)
+            )}
+        else:
+            colunas_usuarios = {r["name"] for r in conn.execute("PRAGMA table_info(usuarios)")}
+        if "perfil" not in colunas_usuarios:
+            conn.execute("ALTER TABLE usuarios ADD COLUMN perfil TEXT NOT NULL DEFAULT 'imobiliaria'")
+        if "empresa_id" not in colunas_usuarios:
+            conn.execute("ALTER TABLE usuarios ADD COLUMN empresa_id TEXT")
 
         # migração leve: agrupamento de jobs que fazem parte da mesma
         # "evolução da obra" (várias etapas geradas a partir de uma descrição)
@@ -484,6 +507,27 @@ def criar_usuario_se_ausente(id_: str, email: str, nome: str | None, senha_hash:
                 "INSERT OR IGNORE INTO usuarios (id, criado_em, email, nome, senha_hash, ativo) VALUES (?, ?, ?, ?, ?, 1)",
                 (id_, _agora(), email.lower(), nome, senha_hash),
             )
+
+
+# ----------------------------------------------------------------------
+# administração master / imobiliárias
+# ----------------------------------------------------------------------
+def listar_empresas() -> list[sqlite3.Row]:
+    with _conectar() as conn:
+        return conn.execute(
+            "SELECT e.*, COUNT(u.id) AS total_usuarios "
+            "FROM empresas e LEFT JOIN usuarios u ON u.empresa_id = e.id "
+            "GROUP BY e.id, e.criado_em, e.nome, e.cnpj, e.plano, e.status "
+            "ORDER BY e.criado_em DESC"
+        ).fetchall()
+
+
+def criar_empresa(id_: str, nome: str, cnpj: str | None, plano: str, status: str = "ativo") -> None:
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO empresas (id, criado_em, nome, cnpj, plano, status) VALUES (?, ?, ?, ?, ?, ?)",
+            (id_, _agora(), nome, cnpj, plano, status),
+        )
 
 
 def criar_documento(id_: str, titulo: str, categoria: str, nome_arquivo: str,

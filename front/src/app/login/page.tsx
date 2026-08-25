@@ -39,8 +39,11 @@ export default function LoginPage() {
         return;
       }
 
+      const dados = await response.json();
       sessionStorage.setItem("medicao-terreno:acesso", "autorizado");
-      router.replace("/");
+      sessionStorage.setItem("medicao-terreno:token", dados.token);
+      sessionStorage.setItem("medicao-terreno:usuario", JSON.stringify(dados.usuario));
+      router.replace(dados.usuario.perfil === "superadmin" ? "/admin" : "/");
     } catch {
       setError("Não foi possível validar o acesso. Confirme que a API está ligada.");
     } finally {

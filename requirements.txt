@@ -8,3 +8,4 @@ google-genai
 python-dotenv
 psycopg[binary]
 psycopg-pool
+PyJWT

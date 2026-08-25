@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Sidebar } from "@/components/sidebar/sidebar";
+import { AdminSidebar } from "@/components/sidebar/admin-sidebar";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [verified, setVerified] = useState(false);
   const isLogin = pathname === "/login";
+  const isAdmin = pathname.startsWith("/admin");
 
   useEffect(() => {
     if (isLogin) return;
@@ -16,8 +18,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       router.replace("/login");
       return;
     }
+    const usuario = JSON.parse(sessionStorage.getItem("medicao-terreno:usuario") ?? "null");
+    if (isAdmin && usuario?.perfil !== "superadmin") {
+      router.replace("/");
+      return;
+    }
     setVerified(true);
-  }, [isLogin, router]);
+  }, [isAdmin, isLogin, router]);
 
   if (isLogin) {
     return <main className="min-h-screen">{children}</main>;
@@ -27,7 +34,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      <Sidebar />
+      {isAdmin ? <AdminSidebar /> : <Sidebar />}
       <main className="flex-1 overflow-y-auto p-8">{children}</main>
     </div>
   );

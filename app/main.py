@@ -27,7 +27,7 @@ from datetime import date
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from PIL import Image, ImageOps, UnidentifiedImageError
@@ -50,7 +50,7 @@ from app.ia_projeto import (
     gerar_video_projeto,
 )
 from app.jobs import Job, JobStatus, criar_job, obter_job
-from app.auth import credenciais_validas, garantir_usuarios_iniciais
+from app.auth import autenticar, exigir_superadmin, garantir_usuarios_iniciais, gerar_token
 from app.evolution import EvolutionError, conectar as conectar_whatsapp, enviar_texto as enviar_whatsapp, status as status_whatsapp
 from app.lembretes import processar_lembretes, rotina_diaria, texto_lembrete
 
@@ -92,10 +92,17 @@ class LoginDados(BaseModel):
     senha: str
 
 
+class EmpresaDados(BaseModel):
+    nome: str
+    cnpj: str | None = None
+    plano: str = "teste"
+
+
 @app.post("/auth/login")
 def login(dados: LoginDados):
     """Confere as credenciais informadas na tela de login."""
-    if not credenciais_validas(dados.email, dados.senha):
+    usuario = autenticar(dados.email, dados.senha)
+    if usuario is None:
         raise HTTPException(status_code=401, detail="E-mail ou senha inválidos.")
     return {"ok": True}
 
@@ -958,7 +965,25 @@ def atualizar_whatsapp_cobranca(cliente_id: str, dados: ClienteWhatsappDados):
     if dados.whatsapp_cobranca_ativo and not cliente["contato"]:
         raise HTTPException(status_code=400, detail="cadastre um WhatsApp válido no cliente antes de ativar os lembretes")
     db.atualizar_whatsapp_cobranca_cliente(cliente_id, dados.whatsapp_cobranca_ativo)
-    return {"ok": True}
+    return {"ok": True, "token": gerar_token(usuario), "usuario": usuario}
+
+
+@app.get("/admin/empresas")
+def admin_listar_empresas(_: dict = Depends(exigir_superadmin)):
+    return [dict(empresa) for empresa in db.listar_empresas()]
+
+
+@app.post("/admin/empresas")
+def admin_criar_empresa(dados: EmpresaDados, _: dict = Depends(exigir_superadmin)):
+    nome = dados.nome.strip()
+    plano = dados.plano.strip().lower()
+    if not nome:
+        raise HTTPException(status_code=400, detail="Informe o nome da imobiliária.")
+    if plano not in {"teste", "basico", "profissional", "premium"}:
+        raise HTTPException(status_code=400, detail="Plano inválido.")
+    identificador = uuid.uuid4().hex
+    db.criar_empresa(identificador, nome, dados.cnpj.strip() if dados.cnpj else None, plano)
+    return next(dict(empresa) for empresa in db.listar_empresas() if empresa["id"] == identificador)
 
 
 @app.delete("/clientes/{cliente_id}")
