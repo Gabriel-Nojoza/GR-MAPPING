@@ -252,7 +252,7 @@ export default function GerarProjeto() {
       </div>
 
       {status === "pronto" && jobId && <Card className="mt-6 p-5 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold text-slate-900">Vídeo pronto</h2><p className="text-sm text-slate-500">Visualização em vídeo real gerada por IA ({duracaoTotal}s).</p></div><a href={`${API_URL}/videos-salvos/${jobId}/download`} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-primary-hover"><Download size={16} /> Baixar MP4</a></div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold text-slate-900">Vídeo pronto</h2><p className="text-sm text-slate-500">Imagem criada por IA e vídeo de apresentação montado na VPS ({duracaoTotal}s).</p></div><a href={`${API_URL}/videos-salvos/${jobId}/download`} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-primary-hover"><Download size={16} /> Baixar MP4</a></div>
         <video key={duracaoTotal} src={`${API_URL}/gerar-projeto/${jobId}/video?v=${duracaoTotal}`} controls className="mt-5 w-full rounded-xl border border-slate-200" />
         {podeEstender && <Button variant="secondary" onClick={estender} className="mt-5">Estender vídeo (+7s)</Button>}
       </Card>}

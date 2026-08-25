@@ -47,7 +47,6 @@ from app.ia_projeto import (
     estender_video_projeto,
     gerar_imagem_projeto,
     gerar_video_local,
-    gerar_video_projeto,
 )
 from app.jobs import Job, JobStatus, criar_job, obter_job
 from app.auth import _gerar_hash, autenticar, exigir_superadmin, garantir_usuarios_iniciais, gerar_token
@@ -576,7 +575,9 @@ def _rodar_geracao(job: Job, foto_bytes: bytes, foto_mime: str, descricao: str,
         job.imagem_bytes, job.imagem_mime = imagem_bytes, imagem_mime
         _salvar_arquivo_projeto(job.id, "imagem", imagem_bytes, imagem_mime)
 
-        video_bytes, video_mime, video_obj = gerar_video_projeto(imagem_bytes, imagem_mime, descricao)
+        # Fluxo econômico: a IA gera a imagem e a VPS monta o MP4 com FFmpeg.
+        video_bytes, video_mime = gerar_video_local(imagem_bytes, imagem_mime)
+        video_obj = None
         job.video_bytes, job.video_mime = video_bytes, video_mime
         job.video_obj = video_obj
         _salvar_arquivo_projeto(job.id, "video", video_bytes, video_mime)

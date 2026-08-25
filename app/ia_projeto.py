@@ -14,6 +14,7 @@ https://aistudio.google.com/apikey).
 from __future__ import annotations
 
 import os
+import base64
 import subprocess
 import tempfile
 import time
@@ -23,7 +24,7 @@ from pathlib import Path
 from google import genai
 from google.genai import types
 
-IMAGE_MODEL = "gemini-2.5-flash-image"
+IMAGE_MODEL = "gemini-3.1-flash-image"
 VIDEO_MODEL = "veo-3.1-fast-generate-preview"
 VIDEO_DURATION_S = 8  # limite máximo aceito pelo veo-3.1-fast-generate-preview (min 4, max 8)
 POLL_INTERVAL_S = 10
@@ -135,20 +136,9 @@ def gerar_imagem_projeto(
     referencia_mime: str | None = None,
     fotos_adicionais: list[tuple[bytes, str]] | None = None,
 ) -> tuple[bytes, str]:
-    """
-    Etapa A: edita a foto do terreno pra mostrar o projeto construído.
-
-    Se `referencia_bytes` for informado, manda uma segunda imagem (ex: foto
-    de uma casa pronta) pra IA usar como referência de estilo/fachada, em
-    vez de inventar a aparência da construção sozinha.
-    """
+    """Gera a imagem arquitetônica com Gemini 3.1 Flash Image."""
     client = _client()
-
     fotos_terreno = [(foto_bytes, foto_mime), *(fotos_adicionais or [])]
-    contents = [
-        types.Part.from_bytes(data=bytes_foto, mime_type=mime_foto)
-        for bytes_foto, mime_foto in fotos_terreno
-    ]
     prompt = _PROMPT_IMAGEM.format(descricao=descricao)
     if len(fotos_terreno) > 1:
         prompt += (
@@ -156,25 +146,35 @@ def gerar_imagem_projeto(
             "Use todas para compreender fielmente limites, rua, vizinhos e posição da construção."
         )
     if referencia_bytes and referencia_mime:
-        contents.append(types.Part.from_bytes(data=referencia_bytes, mime_type=referencia_mime))
         prompt += " A última imagem é referência apenas de estilo, fachada e acabamento; não é outro terreno."
-    contents.append(prompt + "\n\n" + _INSTRUCAO_CAMERA_FRONTAL)
 
-    resposta = client.models.generate_content(
+    entrada = [{"type": "text", "text": prompt + "\n\n" + _INSTRUCAO_CAMERA_FRONTAL}]
+    entrada.extend({
+        "type": "image",
+        "data": base64.b64encode(bytes_foto).decode("ascii"),
+        "mime_type": mime_foto,
+    } for bytes_foto, mime_foto in fotos_terreno)
+    if referencia_bytes and referencia_mime:
+        entrada.append({
+            "type": "image",
+            "data": base64.b64encode(referencia_bytes).decode("ascii"),
+            "mime_type": referencia_mime,
+        })
+
+    resposta = client.interactions.create(
         model=IMAGE_MODEL,
-        contents=contents,
+        input=entrada,
+        response_format={
+            "type": "image",
+            "mime_type": "image/jpeg",
+            "aspect_ratio": "16:9",
+            "image_size": "2K",
+        },
     )
-
-    candidatos = resposta.candidates or []
-    partes = candidatos[0].content.parts if candidatos and candidatos[0].content else []
-    for parte in partes:
-        if parte.inline_data is not None:
-            return parte.inline_data.data, parte.inline_data.mime_type
-
-    raise GeracaoError(
-        "a IA não devolveu uma imagem — tente descrever o projeto de outro jeito."
-    )
-
+    imagem = getattr(resposta, "output_image", None)
+    if imagem and getattr(imagem, "data", None):
+        return base64.b64decode(imagem.data), getattr(imagem, "mime_type", None) or "image/jpeg"
+    raise GeracaoError("a IA não devolveu uma imagem — tente descrever o projeto de outro jeito.")
 
 def gerar_video_projeto(
     imagem_bytes: bytes, imagem_mime: str, descricao: str
