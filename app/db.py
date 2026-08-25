@@ -509,6 +509,53 @@ def criar_usuario_se_ausente(id_: str, email: str, nome: str | None, senha_hash:
             )
 
 
+def criar_ou_atualizar_usuario(
+    id_: str,
+    email: str,
+    nome: str | None,
+    senha_hash: str,
+    perfil: str,
+    empresa_id: str | None = None,
+) -> None:
+    """Cria uma conta ou redefine sua senha e permissões sem expô-las."""
+    with _conectar() as conn:
+        if DATABASE_URL:
+            conn.execute(
+                """
+                INSERT INTO usuarios (id, criado_em, email, nome, senha_hash, ativo, perfil, empresa_id)
+                VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+                ON CONFLICT (email) DO UPDATE SET
+                    nome = EXCLUDED.nome,
+                    senha_hash = EXCLUDED.senha_hash,
+                    ativo = 1,
+                    perfil = EXCLUDED.perfil,
+                    empresa_id = EXCLUDED.empresa_id
+                """,
+                (id_, _agora(), email.lower(), nome, senha_hash, perfil, empresa_id),
+            )
+        else:
+            existente = conn.execute(
+                "SELECT id FROM usuarios WHERE email = ?", (email.lower(),)
+            ).fetchone()
+            if existente:
+                conn.execute(
+                    """
+                    UPDATE usuarios
+                    SET nome = ?, senha_hash = ?, ativo = 1, perfil = ?, empresa_id = ?
+                    WHERE email = ?
+                    """,
+                    (nome, senha_hash, perfil, empresa_id, email.lower()),
+                )
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO usuarios (id, criado_em, email, nome, senha_hash, ativo, perfil, empresa_id)
+                    VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+                    """,
+                    (id_, _agora(), email.lower(), nome, senha_hash, perfil, empresa_id),
+                )
+
+
 # ----------------------------------------------------------------------
 # administração master / imobiliárias
 # ----------------------------------------------------------------------
