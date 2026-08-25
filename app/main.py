@@ -52,6 +52,7 @@ from app.jobs import Job, JobStatus, criar_job, obter_job
 from app.auth import _gerar_hash, autenticar, exigir_superadmin, garantir_usuarios_iniciais, gerar_token
 from app.evolution import EvolutionError, conectar as conectar_whatsapp, enviar_texto as enviar_whatsapp, status as status_whatsapp
 from app.lembretes import processar_lembretes, rotina_diaria, texto_lembrete
+from app.leads import pesquisar_leads
 
 app = FastAPI(title="Medição de Terreno API", version="0.1.0")
 db.init_db()
@@ -112,6 +113,12 @@ class UsuarioEmpresaUpdate(BaseModel):
     email: str
     empresa_id: str
     senha: str | None = None
+
+
+class BuscaLeadsDados(BaseModel):
+    cidade: str
+    segmento: str = "Imobiliárias"
+    limite: int = 20
 
 
 @app.post("/auth/login")
@@ -994,6 +1001,15 @@ def atualizar_whatsapp_cobranca(cliente_id: str, dados: ClienteWhatsappDados):
 @app.get("/admin/empresas")
 def admin_listar_empresas(_: dict = Depends(exigir_superadmin)):
     return [dict(empresa) for empresa in db.listar_empresas()]
+
+
+@app.post("/admin/leads/pesquisar")
+def admin_pesquisar_leads(dados: BuscaLeadsDados, _: dict = Depends(exigir_superadmin)):
+    cidade = dados.cidade.strip()
+    segmento = dados.segmento.strip() or "Imobiliárias"
+    if len(cidade) < 2:
+        raise HTTPException(status_code=400, detail="Informe uma cidade ou região para pesquisar.")
+    return pesquisar_leads(cidade, segmento, dados.limite)
 
 
 @app.post("/admin/empresas")

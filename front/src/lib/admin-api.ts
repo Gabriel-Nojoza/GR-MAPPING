@@ -88,3 +88,8 @@ export async function excluirUsuarioEmpresa(id: string): Promise<void> {
     headers: cabecalhos(),
   }));
 }
+
+export type LeadEncontrado = { place_id?: string; nome: string; endereco?: string | null; tipo?: string | null; situacao?: string | null; google_maps_url?: string | null; };
+export async function pesquisarLeads(dados: { cidade: string; segmento: string; limite?: number }): Promise<LeadEncontrado[]> {
+  return respostaAdmin(await fetch(`${API_URL}/admin/leads/pesquisar`, { method: "POST", headers: cabecalhos(), body: JSON.stringify(dados) }));
+}
