@@ -108,6 +108,13 @@ class UsuarioEmpresaDados(BaseModel):
     empresa_id: str
 
 
+class UsuarioEmpresaUpdate(BaseModel):
+    nome: str
+    email: str
+    empresa_id: str
+    senha: str | None = None
+
+
 @app.post("/auth/login")
 def login(dados: LoginDados):
     """Confere as credenciais informadas na tela de login."""
@@ -1034,6 +1041,40 @@ def admin_criar_usuario(dados: UsuarioEmpresaDados, _: dict = Depends(exigir_sup
         uuid.uuid4().hex, email, nome, _gerar_hash(dados.senha), "imobiliaria", dados.empresa_id
     )
     return next(dict(usuario) for usuario in db.listar_usuarios() if usuario["email"] == email)
+
+
+@app.patch("/admin/usuarios/{usuario_id}")
+def admin_atualizar_usuario(usuario_id: str, dados: UsuarioEmpresaUpdate, _: dict = Depends(exigir_superadmin)):
+    usuario = db.obter_usuario(usuario_id)
+    if usuario is None or usuario["perfil"] != "imobiliaria":
+        raise HTTPException(status_code=404, detail="Usuário de imobiliária não encontrado.")
+    nome, email = dados.nome.strip(), dados.email.strip().lower()
+    if not nome or "@" not in email:
+        raise HTTPException(status_code=400, detail="Informe nome e e-mail válidos.")
+    if db.obter_empresa(dados.empresa_id) is None:
+        raise HTTPException(status_code=400, detail="Imobiliária não encontrada.")
+    if dados.senha is not None and dados.senha and len(dados.senha) < 8:
+        raise HTTPException(status_code=400, detail="A nova senha precisa ter pelo menos 8 caracteres.")
+    hash_senha = _gerar_hash(dados.senha) if dados.senha else None
+    try:
+        atualizado = db.atualizar_usuario_empresa(usuario_id, nome, email, dados.empresa_id, hash_senha)
+    except Exception as erro:
+        if "unique" in str(erro).lower():
+            raise HTTPException(status_code=409, detail="Este e-mail já está em uso.")
+        raise
+    if not atualizado:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    return next(dict(item) for item in db.listar_usuarios() if item["id"] == usuario_id)
+
+
+@app.delete("/admin/usuarios/{usuario_id}")
+def admin_excluir_usuario(usuario_id: str, _: dict = Depends(exigir_superadmin)):
+    usuario = db.obter_usuario(usuario_id)
+    if usuario is None or usuario["perfil"] != "imobiliaria":
+        raise HTTPException(status_code=404, detail="Usuário de imobiliária não encontrado.")
+    if not db.desativar_usuario(usuario_id):
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    return {"ok": True}
 
 
 @app.delete("/clientes/{cliente_id}")

@@ -73,3 +73,18 @@ export async function criarUsuarioEmpresa(dados: { nome: string; email: string; 
     body: JSON.stringify(dados),
   }));
 }
+
+export async function atualizarUsuarioEmpresa(id: string, dados: { nome: string; email: string; empresa_id: string; senha?: string }): Promise<UsuarioAdmin> {
+  return respostaAdmin(await fetch(`${API_URL}/admin/usuarios/${id}`, {
+    method: "PATCH",
+    headers: cabecalhos(),
+    body: JSON.stringify(dados),
+  }));
+}
+
+export async function excluirUsuarioEmpresa(id: string): Promise<void> {
+  await respostaAdmin(await fetch(`${API_URL}/admin/usuarios/${id}`, {
+    method: "DELETE",
+    headers: cabecalhos(),
+  }));
+}

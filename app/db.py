@@ -636,6 +636,38 @@ def listar_usuarios() -> list[sqlite3.Row]:
         ).fetchall()
 
 
+def obter_usuario(id_: str) -> sqlite3.Row | None:
+    with _conectar() as conn:
+        return conn.execute("SELECT * FROM usuarios WHERE id = ?", (id_,)).fetchone()
+
+
+def atualizar_usuario_empresa(
+    id_: str,
+    nome: str,
+    email: str,
+    empresa_id: str,
+    senha_hash: str | None = None,
+) -> bool:
+    with _conectar() as conn:
+        if senha_hash:
+            cur = conn.execute(
+                "UPDATE usuarios SET nome = ?, email = ?, empresa_id = ?, senha_hash = ? WHERE id = ?",
+                (nome, email.lower(), empresa_id, senha_hash, id_),
+            )
+        else:
+            cur = conn.execute(
+                "UPDATE usuarios SET nome = ?, email = ?, empresa_id = ? WHERE id = ?",
+                (nome, email.lower(), empresa_id, id_),
+            )
+        return cur.rowcount > 0
+
+
+def desativar_usuario(id_: str) -> bool:
+    with _conectar() as conn:
+        cur = conn.execute("UPDATE usuarios SET ativo = 0 WHERE id = ?", (id_,))
+        return cur.rowcount > 0
+
+
 def migrar_registros_sem_empresa(empresa_id: str) -> None:
     """Associa o acervo legado a uma imobiliária, sem apagar nenhum dado."""
     tabelas = (
