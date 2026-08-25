@@ -48,6 +48,9 @@ export async function criarEmpresa(dados: {
   nome: string;
   cnpj?: string;
   plano: Empresa["plano"];
+  responsavel_nome?: string;
+  responsavel_email?: string;
+  responsavel_senha?: string;
 }): Promise<Empresa> {
   return respostaAdmin(await fetch(`${API_URL}/admin/empresas`, {
     method: "POST",

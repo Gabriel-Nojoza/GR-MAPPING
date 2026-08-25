@@ -96,6 +96,9 @@ class EmpresaDados(BaseModel):
     nome: str
     cnpj: str | None = None
     plano: str = "teste"
+    responsavel_nome: str | None = None
+    responsavel_email: str | None = None
+    responsavel_senha: str | None = None
 
 
 class UsuarioEmpresaDados(BaseModel):
@@ -994,7 +997,20 @@ def admin_criar_empresa(dados: EmpresaDados, _: dict = Depends(exigir_superadmin
     if plano not in {"teste", "basico", "profissional", "premium"}:
         raise HTTPException(status_code=400, detail="Plano inválido.")
     identificador = uuid.uuid4().hex
-    db.criar_empresa(identificador, nome, dados.cnpj.strip() if dados.cnpj else None, plano)
+    campos_responsavel = (dados.responsavel_nome, dados.responsavel_email, dados.responsavel_senha)
+    if any(campos_responsavel) and not all(campos_responsavel):
+        raise HTTPException(status_code=400, detail="Preencha nome, e-mail e senha do responsável.")
+    if all(campos_responsavel):
+        email = (dados.responsavel_email or "").strip().lower()
+        senha = dados.responsavel_senha or ""
+        if "@" not in email or len(senha) < 8:
+            raise HTTPException(status_code=400, detail="Informe e-mail válido e senha com pelo menos 8 caracteres.")
+        db.criar_empresa_com_acesso(
+            identificador, nome, dados.cnpj.strip() if dados.cnpj else None, plano,
+            uuid.uuid4().hex, (dados.responsavel_nome or "").strip(), email, _gerar_hash(senha),
+        )
+    else:
+        db.criar_empresa(identificador, nome, dados.cnpj.strip() if dados.cnpj else None, plano)
     return next(dict(empresa) for empresa in db.listar_empresas() if empresa["id"] == identificador)
 
 

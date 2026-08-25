@@ -593,6 +593,29 @@ def criar_empresa(id_: str, nome: str, cnpj: str | None, plano: str, status: str
         )
 
 
+def criar_empresa_com_acesso(
+    empresa_id: str,
+    nome_empresa: str,
+    cnpj: str | None,
+    plano: str,
+    usuario_id: str,
+    nome_usuario: str,
+    email_usuario: str,
+    senha_hash: str,
+) -> None:
+    """Cria empresa e acesso inicial na mesma operação."""
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO empresas (id, criado_em, nome, cnpj, plano, status) VALUES (?, ?, ?, ?, ?, 'ativo')",
+            (empresa_id, _agora(), nome_empresa, cnpj, plano),
+        )
+        conn.execute(
+            "INSERT INTO usuarios (id, criado_em, email, nome, senha_hash, ativo, perfil, empresa_id) "
+            "VALUES (?, ?, ?, ?, ?, 1, 'imobiliaria', ?)",
+            (usuario_id, _agora(), email_usuario.lower(), nome_usuario, senha_hash, empresa_id),
+        )
+
+
 def obter_empresa(id_: str) -> sqlite3.Row | None:
     with _conectar() as conn:
         return conn.execute("SELECT * FROM empresas WHERE id = ?", (id_,)).fetchone()
