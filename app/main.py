@@ -104,7 +104,12 @@ def login(dados: LoginDados):
     usuario = autenticar(dados.email, dados.senha)
     if usuario is None:
         raise HTTPException(status_code=401, detail="E-mail ou senha inválidos.")
-    return {"ok": True}
+    # O front usa o perfil para direcionar cada pessoa à área correta.
+    return {
+        "ok": True,
+        "token": gerar_token(usuario),
+        "usuario": usuario,
+    }
 
 
 def _extensao_por_mime(mime: str | None, padrao: str) -> str:
