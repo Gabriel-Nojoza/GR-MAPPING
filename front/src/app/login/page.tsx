@@ -44,7 +44,11 @@ export default function LoginPage() {
       sessionStorage.setItem("medicao-terreno:token", dados.token);
       sessionStorage.setItem("medicao-terreno:usuario", JSON.stringify(dados.usuario));
       router.replace(dados.usuario.perfil === "superadmin" ? "/admin" : "/");
-    } catch {
+    } catch (causa) {
+      console.error("Falha no login:", causa);
+      const detalhe = causa instanceof Error ? causa.message : "erro desconhecido";
+      setError(`Não foi possível concluir o login: ${detalhe}`);
+      return;
       setError("Não foi possível validar o acesso. Confirme que a API está ligada.");
     } finally {
       setLoading(false);
