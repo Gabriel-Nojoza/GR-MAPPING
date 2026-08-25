@@ -10,6 +10,17 @@ export type Empresa = {
   total_usuarios: number;
 };
 
+export type UsuarioAdmin = {
+  id: string;
+  criado_em: string;
+  nome?: string | null;
+  email: string;
+  ativo: boolean;
+  perfil: "superadmin" | "imobiliaria";
+  empresa_id?: string | null;
+  empresa_nome?: string | null;
+};
+
 function cabecalhos() {
   const token = sessionStorage.getItem("medicao-terreno:token");
   return {
@@ -39,6 +50,21 @@ export async function criarEmpresa(dados: {
   plano: Empresa["plano"];
 }): Promise<Empresa> {
   return respostaAdmin(await fetch(`${API_URL}/admin/empresas`, {
+    method: "POST",
+    headers: cabecalhos(),
+    body: JSON.stringify(dados),
+  }));
+}
+
+export async function listarUsuarios(): Promise<UsuarioAdmin[]> {
+  return respostaAdmin(await fetch(`${API_URL}/admin/usuarios`, {
+    headers: cabecalhos(),
+    cache: "no-store",
+  }));
+}
+
+export async function criarUsuarioEmpresa(dados: { nome: string; email: string; senha: string; empresa_id: string }): Promise<UsuarioAdmin> {
+  return respostaAdmin(await fetch(`${API_URL}/admin/usuarios`, {
     method: "POST",
     headers: cabecalhos(),
     body: JSON.stringify(dados),

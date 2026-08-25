@@ -92,12 +92,15 @@ def autenticar(email: str, senha: str) -> dict | None:
     if not _confere_hash(senha, usuario["senha_hash"]):
         return None
 
+    empresa = db.obter_empresa(usuario["empresa_id"]) if usuario["empresa_id"] else None
+
     return {
         "id": usuario["id"],
         "nome": usuario["nome"],
         "email": usuario["email"],
         "perfil": usuario["perfil"],
         "empresa_id": usuario["empresa_id"],
+        "empresa_nome": empresa["nome"] if empresa else None,
     }
 
 

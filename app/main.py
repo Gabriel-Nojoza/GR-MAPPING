@@ -50,7 +50,7 @@ from app.ia_projeto import (
     gerar_video_projeto,
 )
 from app.jobs import Job, JobStatus, criar_job, obter_job
-from app.auth import autenticar, exigir_superadmin, garantir_usuarios_iniciais, gerar_token
+from app.auth import _gerar_hash, autenticar, exigir_superadmin, garantir_usuarios_iniciais, gerar_token
 from app.evolution import EvolutionError, conectar as conectar_whatsapp, enviar_texto as enviar_whatsapp, status as status_whatsapp
 from app.lembretes import processar_lembretes, rotina_diaria, texto_lembrete
 
@@ -96,6 +96,13 @@ class EmpresaDados(BaseModel):
     nome: str
     cnpj: str | None = None
     plano: str = "teste"
+
+
+class UsuarioEmpresaDados(BaseModel):
+    nome: str
+    email: str
+    senha: str
+    empresa_id: str
 
 
 @app.post("/auth/login")
@@ -970,7 +977,7 @@ def atualizar_whatsapp_cobranca(cliente_id: str, dados: ClienteWhatsappDados):
     if dados.whatsapp_cobranca_ativo and not cliente["contato"]:
         raise HTTPException(status_code=400, detail="cadastre um WhatsApp válido no cliente antes de ativar os lembretes")
     db.atualizar_whatsapp_cobranca_cliente(cliente_id, dados.whatsapp_cobranca_ativo)
-    return {"ok": True, "token": gerar_token(usuario), "usuario": usuario}
+    return {"ok": True}
 
 
 @app.get("/admin/empresas")
@@ -989,6 +996,28 @@ def admin_criar_empresa(dados: EmpresaDados, _: dict = Depends(exigir_superadmin
     identificador = uuid.uuid4().hex
     db.criar_empresa(identificador, nome, dados.cnpj.strip() if dados.cnpj else None, plano)
     return next(dict(empresa) for empresa in db.listar_empresas() if empresa["id"] == identificador)
+
+
+@app.get("/admin/usuarios")
+def admin_listar_usuarios(_: dict = Depends(exigir_superadmin)):
+    """Lista acessos sem jamais devolver hashes de senha."""
+    return [dict(usuario) for usuario in db.listar_usuarios()]
+
+
+@app.post("/admin/usuarios")
+def admin_criar_usuario(dados: UsuarioEmpresaDados, _: dict = Depends(exigir_superadmin)):
+    email = dados.email.strip().lower()
+    nome = dados.nome.strip()
+    if not nome or "@" not in email:
+        raise HTTPException(status_code=400, detail="Informe nome e e-mail válidos.")
+    if len(dados.senha) < 8:
+        raise HTTPException(status_code=400, detail="A senha precisa ter pelo menos 8 caracteres.")
+    if db.obter_empresa(dados.empresa_id) is None:
+        raise HTTPException(status_code=400, detail="Imobiliária não encontrada.")
+    db.criar_ou_atualizar_usuario(
+        uuid.uuid4().hex, email, nome, _gerar_hash(dados.senha), "imobiliaria", dados.empresa_id
+    )
+    return next(dict(usuario) for usuario in db.listar_usuarios() if usuario["email"] == email)
 
 
 @app.delete("/clientes/{cliente_id}")

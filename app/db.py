@@ -252,6 +252,22 @@ def init_db() -> None:
         if "empresa_id" not in colunas_usuarios:
             conn.execute("ALTER TABLE usuarios ADD COLUMN empresa_id TEXT")
 
+        # Todas as informações operacionais pertencem a uma imobiliária.
+        # As colunas são adicionadas sem apagar os registros já existentes.
+        tabelas_com_empresa = (
+            "terrenos", "jobs", "lancamentos_financeiros", "clientes",
+            "documentos", "imoveis", "cobrancas_aluguel",
+        )
+        for tabela in tabelas_com_empresa:
+            if DATABASE_URL:
+                colunas_tabela = {r["column_name"] for r in conn.execute(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name = %s", (tabela,)
+                )}
+            else:
+                colunas_tabela = {r["name"] for r in conn.execute(f"PRAGMA table_info({tabela})")}
+            if "empresa_id" not in colunas_tabela:
+                conn.execute(f"ALTER TABLE {tabela} ADD COLUMN empresa_id TEXT")
+
         # migração leve: agrupamento de jobs que fazem parte da mesma
         # "evolução da obra" (várias etapas geradas a partir de uma descrição)
         if DATABASE_URL:
@@ -575,6 +591,49 @@ def criar_empresa(id_: str, nome: str, cnpj: str | None, plano: str, status: str
             "INSERT INTO empresas (id, criado_em, nome, cnpj, plano, status) VALUES (?, ?, ?, ?, ?, ?)",
             (id_, _agora(), nome, cnpj, plano, status),
         )
+
+
+def obter_empresa(id_: str) -> sqlite3.Row | None:
+    with _conectar() as conn:
+        return conn.execute("SELECT * FROM empresas WHERE id = ?", (id_,)).fetchone()
+
+
+def obter_empresa_por_nome(nome: str) -> sqlite3.Row | None:
+    with _conectar() as conn:
+        return conn.execute("SELECT * FROM empresas WHERE nome = ?", (nome,)).fetchone()
+
+
+def listar_usuarios() -> list[sqlite3.Row]:
+    with _conectar() as conn:
+        return conn.execute(
+            "SELECT u.id, u.criado_em, u.nome, u.email, u.ativo, u.perfil, u.empresa_id, "
+            "e.nome AS empresa_nome FROM usuarios u "
+            "LEFT JOIN empresas e ON e.id = u.empresa_id "
+            "ORDER BY u.criado_em DESC"
+        ).fetchall()
+
+
+def migrar_registros_sem_empresa(empresa_id: str) -> None:
+    """Associa o acervo legado a uma imobiliária, sem apagar nenhum dado."""
+    tabelas = (
+        "terrenos", "jobs", "lancamentos_financeiros", "clientes",
+        "documentos", "imoveis", "cobrancas_aluguel",
+    )
+    with _conectar() as conn:
+        for tabela in tabelas:
+            conn.execute(
+                f"UPDATE {tabela} SET empresa_id = ? WHERE empresa_id IS NULL",
+                (empresa_id,),
+            )
+
+
+def vincular_usuario_empresa(email: str, empresa_id: str, perfil: str = "imobiliaria") -> bool:
+    with _conectar() as conn:
+        cur = conn.execute(
+            "UPDATE usuarios SET empresa_id = ?, perfil = ?, ativo = 1 WHERE email = ?",
+            (empresa_id, perfil, email.lower()),
+        )
+        return cur.rowcount > 0
 
 
 def criar_documento(id_: str, titulo: str, categoria: str, nome_arquivo: str,
