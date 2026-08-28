@@ -7,3 +7,4 @@ scripts/projeto_gerado.*
 dados.db
 uploads/
 .pytest_cache/
+*.log

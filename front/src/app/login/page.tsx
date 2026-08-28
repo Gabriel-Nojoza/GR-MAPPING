@@ -43,7 +43,13 @@ export default function LoginPage() {
       sessionStorage.setItem("medicao-terreno:acesso", "autorizado");
       sessionStorage.setItem("medicao-terreno:token", dados.token);
       sessionStorage.setItem("medicao-terreno:usuario", JSON.stringify(dados.usuario));
-      router.replace(dados.usuario.perfil === "superadmin" ? "/admin" : "/");
+      const destino =
+        dados.usuario.perfil === "superadmin"
+          ? "/admin"
+          : dados.usuario.empresa_ramo === "engenharia"
+            ? "/eng"
+            : "/";
+      router.replace(destino);
     } catch (causa) {
       console.error("Falha no login:", causa);
       const detalhe = causa instanceof Error ? causa.message : "erro desconhecido";

@@ -140,7 +140,8 @@ def init_db() -> None:
             nome TEXT NOT NULL,
             contato TEXT,
             email TEXT,
-            whatsapp_cobranca_ativo INTEGER NOT NULL DEFAULT 0
+            whatsapp_cobranca_ativo INTEGER NOT NULL DEFAULT 0,
+            dados_json TEXT
             )
         """)
         conn.execute("""
@@ -150,7 +151,8 @@ def init_db() -> None:
                 nome TEXT NOT NULL,
                 cnpj TEXT,
                 plano TEXT NOT NULL DEFAULT 'teste',
-                status TEXT NOT NULL DEFAULT 'ativo'
+                status TEXT NOT NULL DEFAULT 'ativo',
+                ramo TEXT NOT NULL DEFAULT 'imobiliaria'
             )
         """)
         conn.execute("""
@@ -221,6 +223,18 @@ def init_db() -> None:
             )
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS recursos_eng (
+                id TEXT PRIMARY KEY,
+                criado_em TEXT NOT NULL,
+                empresa_id TEXT,
+                tipo TEXT NOT NULL,
+                nome TEXT NOT NULL,
+                dados_json TEXT,
+                foto_nome TEXT,
+                foto_mime TEXT
+            )
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS modelos_mensagem_leads (
                 id TEXT PRIMARY KEY,
                 criado_em TEXT NOT NULL,
@@ -248,6 +262,18 @@ def init_db() -> None:
             colunas_clientes = {r["name"] for r in conn.execute("PRAGMA table_info(clientes)")}
         if "whatsapp_cobranca_ativo" not in colunas_clientes:
             conn.execute("ALTER TABLE clientes ADD COLUMN whatsapp_cobranca_ativo INTEGER NOT NULL DEFAULT 0")
+        if "dados_json" not in colunas_clientes:
+            conn.execute("ALTER TABLE clientes ADD COLUMN dados_json TEXT")
+
+        # migração leve: ramo de atuação da empresa (imobiliaria, engenharia, ...)
+        if DATABASE_URL:
+            colunas_empresas = {r["column_name"] for r in conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = %s", ("empresas",)
+            )}
+        else:
+            colunas_empresas = {r["name"] for r in conn.execute("PRAGMA table_info(empresas)")}
+        if "ramo" not in colunas_empresas:
+            conn.execute("ALTER TABLE empresas ADD COLUMN ramo TEXT NOT NULL DEFAULT 'imobiliaria'")
 
         if DATABASE_URL:
             colunas_usuarios = {r["column_name"] for r in conn.execute(
@@ -481,21 +507,31 @@ def excluir_lancamento(id_: str) -> bool:
 
 
 def criar_cliente(id_: str, nome: str, contato: str | None, email: str | None,
-                  whatsapp_cobranca_ativo: bool = False) -> None:
+                  whatsapp_cobranca_ativo: bool = False, dados_json: str | None = None,
+                  empresa_id: str | None = None) -> None:
     with _conectar() as conn:
-        conn.execute("INSERT INTO clientes (id, criado_em, nome, contato, email, whatsapp_cobranca_ativo) VALUES (?, ?, ?, ?, ?, ?)",
-                     (id_, _agora(), nome, contato, email, int(whatsapp_cobranca_ativo)))
+        conn.execute(
+            "INSERT INTO clientes (id, criado_em, nome, contato, email, whatsapp_cobranca_ativo, dados_json, empresa_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (id_, _agora(), nome, contato, email, int(whatsapp_cobranca_ativo), dados_json, empresa_id),
+        )
 
 
-def listar_clientes(busca: str | None = None) -> list[sqlite3.Row]:
-    consulta, parametros = "SELECT * FROM clientes", ()
+def listar_clientes(busca: str | None = None, empresa_id: str | None = None) -> list[sqlite3.Row]:
+    consulta, parametros = "SELECT * FROM clientes", []
+    filtros = []
+    if empresa_id:
+        filtros.append("empresa_id = ?")
+        parametros.append(empresa_id)
     if busca:
         termo = f"%{busca.strip()}%"
-        consulta += " WHERE nome LIKE ? OR contato LIKE ? OR email LIKE ?"
-        parametros = (termo, termo, termo)
+        filtros.append("(nome LIKE ? OR contato LIKE ? OR email LIKE ?)")
+        parametros.extend([termo, termo, termo])
+    if filtros:
+        consulta += " WHERE " + " AND ".join(filtros)
     consulta += " ORDER BY nome COLLATE NOCASE ASC"
     with _conectar() as conn:
-        return conn.execute(consulta, parametros).fetchall()
+        return conn.execute(consulta, tuple(parametros)).fetchall()
 
 
 def excluir_cliente(id_: str) -> bool:
@@ -612,16 +648,17 @@ def listar_empresas() -> list[sqlite3.Row]:
         return conn.execute(
             "SELECT e.*, COUNT(u.id) AS total_usuarios "
             "FROM empresas e LEFT JOIN usuarios u ON u.empresa_id = e.id "
-            "GROUP BY e.id, e.criado_em, e.nome, e.cnpj, e.plano, e.status "
+            "GROUP BY e.id, e.criado_em, e.nome, e.cnpj, e.plano, e.status, e.ramo "
             "ORDER BY e.criado_em DESC"
         ).fetchall()
 
 
-def criar_empresa(id_: str, nome: str, cnpj: str | None, plano: str, status: str = "ativo") -> None:
+def criar_empresa(id_: str, nome: str, cnpj: str | None, plano: str, status: str = "ativo",
+                  ramo: str = "imobiliaria") -> None:
     with _conectar() as conn:
         conn.execute(
-            "INSERT INTO empresas (id, criado_em, nome, cnpj, plano, status) VALUES (?, ?, ?, ?, ?, ?)",
-            (id_, _agora(), nome, cnpj, plano, status),
+            "INSERT INTO empresas (id, criado_em, nome, cnpj, plano, status, ramo) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (id_, _agora(), nome, cnpj, plano, status, ramo),
         )
 
 
@@ -634,12 +671,13 @@ def criar_empresa_com_acesso(
     nome_usuario: str,
     email_usuario: str,
     senha_hash: str,
+    ramo: str = "imobiliaria",
 ) -> None:
     """Cria empresa e acesso inicial na mesma operação."""
     with _conectar() as conn:
         conn.execute(
-            "INSERT INTO empresas (id, criado_em, nome, cnpj, plano, status) VALUES (?, ?, ?, ?, ?, 'ativo')",
-            (empresa_id, _agora(), nome_empresa, cnpj, plano),
+            "INSERT INTO empresas (id, criado_em, nome, cnpj, plano, status, ramo) VALUES (?, ?, ?, ?, ?, 'ativo', ?)",
+            (empresa_id, _agora(), nome_empresa, cnpj, plano, ramo),
         )
         conn.execute(
             "INSERT INTO usuarios (id, criado_em, email, nome, senha_hash, ativo, perfil, empresa_id) "
@@ -885,3 +923,51 @@ def registrar_lembrete_automatico(cobranca_id: str, tipo: str) -> None:
             conn.execute("INSERT INTO cobranca_lembretes (id, cobranca_id, tipo, enviado_em) VALUES (?, ?, ?, ?) ON CONFLICT (cobranca_id, tipo) DO NOTHING", (os.urandom(16).hex(), cobranca_id, tipo, _agora()))
         else:
             conn.execute("INSERT OR IGNORE INTO cobranca_lembretes (id, cobranca_id, tipo, enviado_em) VALUES (?, ?, ?, ?)", (os.urandom(16).hex(), cobranca_id, tipo, _agora()))
+
+
+# ----------------------------------------------------------------------
+# recursos do ramo engenharia (obras, equipamentos, materiais, medições, monitoramento)
+#
+# Uma única tabela guarda todos os módulos. As colunas comuns ficam
+# explícitas; o que é específico de cada tipo vai em dados_json. Assim um
+# módulo novo não precisa de migração de schema.
+# ----------------------------------------------------------------------
+def criar_recurso_eng(id_: str, empresa_id: str | None, tipo: str, nome: str,
+                      dados_json: str | None) -> None:
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO recursos_eng (id, criado_em, empresa_id, tipo, nome, dados_json) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (id_, _agora(), empresa_id, tipo, nome, dados_json),
+        )
+
+
+def listar_recursos_eng(empresa_id: str | None, tipo: str,
+                        busca: str | None = None) -> list[sqlite3.Row]:
+    consulta = "SELECT * FROM recursos_eng WHERE tipo = ?"
+    parametros: list = [tipo]
+    if empresa_id:
+        consulta += " AND empresa_id = ?"
+        parametros.append(empresa_id)
+    if busca:
+        consulta += " AND nome LIKE ?"
+        parametros.append(f"%{busca.strip()}%")
+    consulta += " ORDER BY criado_em DESC"
+    with _conectar() as conn:
+        return conn.execute(consulta, tuple(parametros)).fetchall()
+
+
+def obter_recurso_eng(id_: str) -> sqlite3.Row | None:
+    with _conectar() as conn:
+        return conn.execute("SELECT * FROM recursos_eng WHERE id = ?", (id_,)).fetchone()
+
+
+def atualizar_foto_recurso_eng(id_: str, nome: str, mime: str | None) -> None:
+    with _conectar() as conn:
+        conn.execute("UPDATE recursos_eng SET foto_nome = ?, foto_mime = ? WHERE id = ?", (nome, mime, id_))
+
+
+def excluir_recurso_eng(id_: str) -> bool:
+    with _conectar() as conn:
+        cur = conn.execute("DELETE FROM recursos_eng WHERE id = ?", (id_,))
+        return cur.rowcount > 0

@@ -7,7 +7,7 @@ import { SidebarContainer, SidebarFooter, SidebarHeader, SidebarItem, SidebarNav
 
 const ITENS_ADMIN = [
   { href: "/admin", icon: LayoutDashboard, label: "Visão geral" },
-  { href: "/admin/imobiliarias", icon: Building2, label: "Imobiliárias" },
+  { href: "/admin/empresas", icon: Building2, label: "Empresas" },
   { href: "/admin/leads", icon: Search, label: "Leads" },
   { href: "/admin/usuarios", icon: UsersRound, label: "Usuários e acessos" },
   { href: "/admin/planos", icon: CreditCard, label: "Planos" },

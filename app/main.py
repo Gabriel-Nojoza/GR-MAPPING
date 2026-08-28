@@ -35,7 +35,7 @@ from pydantic import BaseModel
 
 load_dotenv()  # lê o .env local (GEMINI_API_KEY) antes de qualquer coisa
 
-from app import db
+from app import db, ramos
 from app.metadata import read_photo_metadata, PhotoMetadata
 from app.gsd import compute_gsd
 from app.area import area_do_poligono
@@ -49,7 +49,15 @@ from app.ia_projeto import (
     gerar_video_local,
 )
 from app.jobs import Job, JobStatus, criar_job, obter_job
-from app.auth import _gerar_hash, autenticar, exigir_superadmin, garantir_usuarios_iniciais, gerar_token
+from app.auth import (
+    _gerar_hash,
+    autenticar,
+    contexto_usuario,
+    exigir_superadmin,
+    garantir_usuarios_iniciais,
+    gerar_token,
+    ramo_do_contexto,
+)
 from app.evolution import EvolutionError, conectar as conectar_whatsapp, enviar_texto as enviar_whatsapp, status as status_whatsapp
 from app.lembretes import processar_lembretes, rotina_diaria, texto_lembrete
 from app.leads import pesquisar_leads
@@ -96,6 +104,7 @@ class EmpresaDados(BaseModel):
     nome: str
     cnpj: str | None = None
     plano: str = "teste"
+    ramo: str = "imobiliaria"
     responsavel_nome: str | None = None
     responsavel_email: str | None = None
     responsavel_senha: str | None = None
@@ -138,6 +147,12 @@ def login(dados: LoginDados):
         "token": gerar_token(usuario),
         "usuario": usuario,
     }
+
+
+@app.get("/config/ramo")
+def config_do_ramo(contexto: dict | None = Depends(contexto_usuario)):
+    """Configuração do ramo da empresa do usuário logado (sidebar + campos de cliente)."""
+    return ramos.config_ramo(ramo_do_contexto(contexto))
 
 
 def _extensao_por_mime(mime: str | None, padrao: str) -> str:
@@ -279,10 +294,16 @@ class ClienteDados(BaseModel):
     contato: str | None = None
     email: str | None = None
     whatsapp_cobranca_ativo: bool = False
+    dados: dict = {}
 
 
 class ClienteWhatsappDados(BaseModel):
     whatsapp_cobranca_ativo: bool
+
+
+class RecursoEngDados(BaseModel):
+    nome: str
+    dados: dict = {}
 
 
 class ImovelDados(BaseModel):
@@ -975,21 +996,53 @@ def _normalizar_whatsapp(numero: str | None) -> str | None:
     return digitos
 
 
+def _cliente_resposta(linha) -> dict:
+    """Converte a linha do banco e desserializa os campos específicos do ramo."""
+    dados = dict(linha)
+    bruto = dados.pop("dados_json", None)
+    try:
+        dados["dados"] = json.loads(bruto) if bruto else {}
+    except (TypeError, ValueError):
+        dados["dados"] = {}
+    return dados
+
+
+def _escopo_clientes(contexto: dict | None) -> str | None:
+    """Engenharia enxerga só os clientes da própria empresa; imobiliária mantém o comportamento atual."""
+    if contexto and ramo_do_contexto(contexto) == "engenharia":
+        return contexto.get("empresa_id")
+    return None
+
+
 @app.get("/clientes")
-def listar_clientes(busca: str | None = None):
-    return [dict(item) for item in db.listar_clientes(busca)]
+def listar_clientes(busca: str | None = None, contexto: dict | None = Depends(contexto_usuario)):
+    return [_cliente_resposta(item) for item in db.listar_clientes(busca, _escopo_clientes(contexto))]
 
 
 @app.post("/clientes")
-def criar_cliente(dados: ClienteDados):
+def criar_cliente(dados: ClienteDados, contexto: dict | None = Depends(contexto_usuario)):
     if not dados.nome.strip():
         raise HTTPException(status_code=400, detail="informe o nome do cliente")
     contato = _normalizar_whatsapp(dados.contato) if dados.contato else None
     if dados.whatsapp_cobranca_ativo and not contato:
         raise HTTPException(status_code=400, detail="informe o WhatsApp para ativar lembretes de cobrança")
+
+    ramo = ramo_do_contexto(contexto)
+    permitidas = ramos.chaves_cliente_permitidas(ramo)
+    extras = {k: v for k, v in (dados.dados or {}).items() if k in permitidas and v not in (None, "")}
+    for campo in ramos.campos_cliente_obrigatorios(ramo):
+        if not extras.get(campo["key"]):
+            raise HTTPException(status_code=400, detail=f"informe {campo['label'].lower()}")
+    dados_json = json.dumps(extras, ensure_ascii=False) if extras else None
+
     identificador = uuid.uuid4().hex
-    db.criar_cliente(identificador, dados.nome.strip(), contato, dados.email.strip() if dados.email else None, dados.whatsapp_cobranca_ativo)
-    return next(dict(item) for item in db.listar_clientes() if item["id"] == identificador)
+    empresa_id = contexto.get("empresa_id") if contexto and ramo == "engenharia" else None
+    db.criar_cliente(
+        identificador, dados.nome.strip(), contato,
+        dados.email.strip() if dados.email else None,
+        dados.whatsapp_cobranca_ativo, dados_json, empresa_id,
+    )
+    return next(_cliente_resposta(item) for item in db.listar_clientes() if item["id"] == identificador)
 
 
 @app.patch("/clientes/{cliente_id}/whatsapp-cobranca")
@@ -1000,6 +1053,99 @@ def atualizar_whatsapp_cobranca(cliente_id: str, dados: ClienteWhatsappDados):
     if dados.whatsapp_cobranca_ativo and not cliente["contato"]:
         raise HTTPException(status_code=400, detail="cadastre um WhatsApp válido no cliente antes de ativar os lembretes")
     db.atualizar_whatsapp_cobranca_cliente(cliente_id, dados.whatsapp_cobranca_ativo)
+    return {"ok": True}
+
+
+# ----------------------------------------------------------------------
+# recursos do ramo engenharia (obras, equipamentos, materiais, medições, monitoramento)
+# ----------------------------------------------------------------------
+TIPOS_RECURSO_ENG = {"obra", "equipamento", "material", "medicao", "monitoramento", "custo"}
+
+
+def _empresa_do_contexto(contexto: dict | None) -> str | None:
+    return contexto.get("empresa_id") if contexto else None
+
+
+def _recurso_eng_resposta(linha) -> dict:
+    linha = dict(linha)
+    bruto = linha.pop("dados_json", None)
+    try:
+        dados = json.loads(bruto) if bruto else {}
+    except (TypeError, ValueError):
+        dados = {}
+    return {
+        "id": linha["id"],
+        "criado_em": linha["criado_em"],
+        "tipo": linha["tipo"],
+        "nome": linha["nome"],
+        "tem_foto": bool(linha.get("foto_nome")),
+        "dados": dados,
+    }
+
+
+def _valida_tipo_recurso(tipo: str) -> str:
+    if tipo not in TIPOS_RECURSO_ENG:
+        raise HTTPException(status_code=404, detail="módulo não encontrado")
+    return tipo
+
+
+@app.get("/eng/recursos/{tipo}")
+def listar_recursos_eng(tipo: str, busca: str | None = None,
+                        contexto: dict | None = Depends(contexto_usuario)):
+    _valida_tipo_recurso(tipo)
+    return [_recurso_eng_resposta(item)
+            for item in db.listar_recursos_eng(_empresa_do_contexto(contexto), tipo, busca)]
+
+
+@app.post("/eng/recursos/{tipo}")
+def criar_recurso_eng(tipo: str, dados: RecursoEngDados,
+                      contexto: dict | None = Depends(contexto_usuario)):
+    _valida_tipo_recurso(tipo)
+    nome = (dados.nome or "").strip()
+    if not nome:
+        raise HTTPException(status_code=400, detail="informe o nome / identificação do registro")
+    extras = {k: v for k, v in (dados.dados or {}).items() if v not in (None, "")}
+    dados_json = json.dumps(extras, ensure_ascii=False) if extras else None
+    identificador = uuid.uuid4().hex
+    db.criar_recurso_eng(identificador, _empresa_do_contexto(contexto), tipo, nome, dados_json)
+    return _recurso_eng_resposta(db.obter_recurso_eng(identificador))
+
+
+@app.post("/eng/recursos/{tipo}/{recurso_id}/foto")
+def enviar_foto_recurso_eng(tipo: str, recurso_id: str, foto: UploadFile = File(...)):
+    _valida_tipo_recurso(tipo)
+    if db.obter_recurso_eng(recurso_id) is None:
+        raise HTTPException(status_code=404, detail="registro não encontrado")
+    if foto.content_type not in {"image/jpeg", "image/png", "image/webp"}:
+        raise HTTPException(status_code=400, detail="envie uma imagem JPG, PNG ou WEBP")
+    conteudo = foto.file.read()
+    if not conteudo or len(conteudo) > 12 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="a imagem deve ter no máximo 12 MB")
+    extensao = _extensao_por_mime(foto.content_type, ".jpg")
+    for anterior in UPLOADS_DIR.glob(f"recurso-{recurso_id}.*"):
+        anterior.unlink(missing_ok=True)
+    (UPLOADS_DIR / f"recurso-{recurso_id}{extensao}").write_bytes(conteudo)
+    db.atualizar_foto_recurso_eng(recurso_id, foto.filename or "imagem", foto.content_type)
+    return {"ok": True}
+
+
+@app.get("/eng/recursos/{tipo}/{recurso_id}/foto")
+def foto_recurso_eng(tipo: str, recurso_id: str):
+    _valida_tipo_recurso(tipo)
+    recurso = db.obter_recurso_eng(recurso_id)
+    caminho = next(iter(UPLOADS_DIR.glob(f"recurso-{recurso_id}.*")), None)
+    if recurso is None or caminho is None:
+        raise HTTPException(status_code=404, detail="imagem não encontrada")
+    return Response(content=caminho.read_bytes(), media_type=recurso["foto_mime"] or "image/jpeg")
+
+
+@app.delete("/eng/recursos/{tipo}/{recurso_id}")
+def excluir_recurso_eng(tipo: str, recurso_id: str):
+    _valida_tipo_recurso(tipo)
+    if not db.excluir_recurso_eng(recurso_id):
+        raise HTTPException(status_code=404, detail="registro não encontrado")
+    for arquivo in UPLOADS_DIR.glob(f"recurso-{recurso_id}.*"):
+        arquivo.unlink(missing_ok=True)
     return {"ok": True}
 
 
@@ -1043,10 +1189,13 @@ def admin_excluir_modelo_lead(modelo_id: str, _: dict = Depends(exigir_superadmi
 def admin_criar_empresa(dados: EmpresaDados, _: dict = Depends(exigir_superadmin)):
     nome = dados.nome.strip()
     plano = dados.plano.strip().lower()
+    ramo = (dados.ramo or "").strip().lower()
     if not nome:
-        raise HTTPException(status_code=400, detail="Informe o nome da imobiliária.")
+        raise HTTPException(status_code=400, detail="Informe o nome da empresa.")
     if plano not in {"teste", "basico", "profissional", "premium"}:
         raise HTTPException(status_code=400, detail="Plano inválido.")
+    if not ramos.ramo_valido(ramo):
+        raise HTTPException(status_code=400, detail="Ramo de atuação inválido.")
     identificador = uuid.uuid4().hex
     campos_responsavel = (dados.responsavel_nome, dados.responsavel_email, dados.responsavel_senha)
     if any(campos_responsavel) and not all(campos_responsavel):
@@ -1056,12 +1205,15 @@ def admin_criar_empresa(dados: EmpresaDados, _: dict = Depends(exigir_superadmin
         senha = dados.responsavel_senha or ""
         if "@" not in email or len(senha) < 8:
             raise HTTPException(status_code=400, detail="Informe e-mail válido e senha com pelo menos 8 caracteres.")
+        if db.obter_usuario_por_email(email) is not None:
+            raise HTTPException(status_code=409, detail="Este e-mail já está em uso por outro acesso. Use outro e-mail para o responsável.")
         db.criar_empresa_com_acesso(
             identificador, nome, dados.cnpj.strip() if dados.cnpj else None, plano,
             uuid.uuid4().hex, (dados.responsavel_nome or "").strip(), email, _gerar_hash(senha),
+            ramo=ramo,
         )
     else:
-        db.criar_empresa(identificador, nome, dados.cnpj.strip() if dados.cnpj else None, plano)
+        db.criar_empresa(identificador, nome, dados.cnpj.strip() if dados.cnpj else None, plano, ramo=ramo)
     return next(dict(empresa) for empresa in db.listar_empresas() if empresa["id"] == identificador)
 
 

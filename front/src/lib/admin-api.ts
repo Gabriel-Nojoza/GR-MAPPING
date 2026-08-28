@@ -1,5 +1,7 @@
 import { API_URL } from "@/lib/api";
 
+export type RamoEmpresa = "imobiliaria" | "engenharia";
+
 export type Empresa = {
   id: string;
   criado_em: string;
@@ -7,6 +9,7 @@ export type Empresa = {
   cnpj?: string | null;
   plano: "teste" | "basico" | "profissional" | "premium";
   status: "ativo" | "suspenso";
+  ramo: RamoEmpresa;
   total_usuarios: number;
 };
 
@@ -48,6 +51,7 @@ export async function criarEmpresa(dados: {
   nome: string;
   cnpj?: string;
   plano: Empresa["plano"];
+  ramo: RamoEmpresa;
   responsavel_nome?: string;
   responsavel_email?: string;
   responsavel_senha?: string;

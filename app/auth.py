@@ -11,7 +11,7 @@ import uuid
 import jwt
 from fastapi import Header, HTTPException
 
-from app import db
+from app import db, ramos
 
 
 _ITERACOES = 600_000
@@ -93,6 +93,7 @@ def autenticar(email: str, senha: str) -> dict | None:
         return None
 
     empresa = db.obter_empresa(usuario["empresa_id"]) if usuario["empresa_id"] else None
+    empresa_ramo = _ramo_da_empresa(empresa)
 
     return {
         "id": usuario["id"],
@@ -101,7 +102,18 @@ def autenticar(email: str, senha: str) -> dict | None:
         "perfil": usuario["perfil"],
         "empresa_id": usuario["empresa_id"],
         "empresa_nome": empresa["nome"] if empresa else None,
+        "empresa_ramo": empresa_ramo,
     }
+
+
+def _ramo_da_empresa(empresa) -> str | None:
+    """Lê o ramo da empresa de forma tolerante a bancos antigos sem a coluna."""
+    if empresa is None:
+        return None
+    try:
+        return ramos.normalizar_ramo(empresa["ramo"])
+    except (KeyError, IndexError, TypeError):
+        return ramos.RAMO_PADRAO
 
 
 def _chave_jwt() -> str:
@@ -121,11 +133,38 @@ def gerar_token(usuario: dict) -> str:
         "email": usuario["email"],
         "perfil": usuario["perfil"],
         "empresa_id": usuario["empresa_id"],
+        "empresa_ramo": usuario.get("empresa_ramo"),
         "iat": agora,
         "exp": agora + timedelta(hours=12),
     }
 
     return jwt.encode(dados, _chave_jwt(), algorithm="HS256")
+
+
+def _decodificar(authorization: str | None) -> dict | None:
+    """Lê o JWT do cabeçalho Authorization. Devolve None quando ausente/ inválido."""
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    token = authorization.removeprefix("Bearer ").strip()
+    try:
+        return jwt.decode(token, _chave_jwt(), algorithms=["HS256"])
+    except jwt.PyJWTError:
+        return None
+
+
+def contexto_usuario(authorization: str | None = Header(default=None)) -> dict | None:
+    """Dependency opcional: identifica o usuário logado sem barrar quem não mandou token."""
+    return _decodificar(authorization)
+
+
+def ramo_do_contexto(contexto: dict | None) -> str:
+    """Ramo do usuário logado; cai no padrão para superadmin ou token antigo."""
+    if not contexto:
+        return ramos.RAMO_PADRAO
+    if contexto.get("perfil") == "superadmin":
+        return ramos.RAMO_PADRAO
+    empresa = db.obter_empresa(contexto["empresa_id"]) if contexto.get("empresa_id") else None
+    return _ramo_da_empresa(empresa) or ramos.RAMO_PADRAO
 
 
 def exigir_superadmin(

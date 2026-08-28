@@ -254,11 +254,22 @@ export async function criarLancamento(dados: { tipo: "receita" | "despesa"; desc
 export async function marcarLancamento(id: string, status: "pendente" | "pago") { return financeiroResposta(await fetch(`${API_URL}/financeiro/${id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) })); }
 export async function excluirLancamento(id: string) { return financeiroResposta(await fetch(`${API_URL}/financeiro/${id}`, { method: "DELETE" })); }
 
-export type Cliente = { id: string; criado_em: string; nome: string; contato?: string | null; email?: string | null; whatsapp_cobranca_ativo: boolean };
+export type Cliente = { id: string; criado_em: string; nome: string; contato?: string | null; email?: string | null; whatsapp_cobranca_ativo: boolean; dados?: Record<string, string> };
 export async function getClientes(busca = "") { const res = await fetch(`${API_URL}/clientes?busca=${encodeURIComponent(busca)}`, { cache: "no-store" }); return financeiroResposta(res) as Promise<Cliente[]>; }
-export async function criarCliente(dados: { nome: string; contato?: string; email?: string; whatsapp_cobranca_ativo?: boolean }) { return financeiroResposta(await fetch(`${API_URL}/clientes`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dados) })); }
+export async function criarCliente(dados: { nome: string; contato?: string; email?: string; whatsapp_cobranca_ativo?: boolean; dados?: Record<string, string> }) { const token = sessionStorage.getItem("medicao-terreno:token"); return financeiroResposta(await fetch(`${API_URL}/clientes`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` }, body: JSON.stringify(dados) })); }
 export async function atualizarWhatsappCobrancaCliente(id: string, ativo: boolean) { return financeiroResposta(await fetch(`${API_URL}/clientes/${id}/whatsapp-cobranca`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ whatsapp_cobranca_ativo: ativo }) })); }
 export async function excluirCliente(id: string) { return financeiroResposta(await fetch(`${API_URL}/clientes/${id}`, { method: "DELETE" })); }
+
+export type RecursoEng = {
+  id: string; criado_em: string; tipo: string; nome: string; tem_foto: boolean;
+  dados: Record<string, string>;
+};
+function authHeaders() { const token = sessionStorage.getItem("medicao-terreno:token"); return { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` }; }
+export async function getRecursosEng(tipo: string, busca = "") { return financeiroResposta(await fetch(`${API_URL}/eng/recursos/${tipo}?busca=${encodeURIComponent(busca)}`, { headers: authHeaders(), cache: "no-store" })) as Promise<RecursoEng[]>; }
+export async function criarRecursoEng(tipo: string, dados: { nome: string; dados: Record<string, string> }) { return financeiroResposta(await fetch(`${API_URL}/eng/recursos/${tipo}`, { method: "POST", headers: authHeaders(), body: JSON.stringify(dados) })) as Promise<RecursoEng>; }
+export async function enviarFotoRecursoEng(tipo: string, id: string, foto: File) { const form = new FormData(); form.append("foto", foto); return financeiroResposta(await fetch(`${API_URL}/eng/recursos/${tipo}/${id}/foto`, { method: "POST", body: form })); }
+export async function excluirRecursoEng(tipo: string, id: string) { return financeiroResposta(await fetch(`${API_URL}/eng/recursos/${tipo}/${id}`, { method: "DELETE" })); }
+export function recursoEngFotoUrl(tipo: string, id: string) { return `${API_URL}/eng/recursos/${tipo}/${id}/foto`; }
 
 export type Documento = { id: string; criado_em: string; titulo: string; categoria: string; nome_arquivo: string; mime?: string | null; tamanho_bytes: number };
 export async function getDocumentos(busca = "") { const res = await fetch(`${API_URL}/documentos?busca=${encodeURIComponent(busca)}`, { cache: "no-store" }); return financeiroResposta(res) as Promise<Documento[]>; }
