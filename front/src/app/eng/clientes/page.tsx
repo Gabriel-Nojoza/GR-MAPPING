@@ -9,6 +9,7 @@ import { getRamoConfig, type CampoCliente } from "@/lib/ramos";
 import { CamposDinamicos, contratoRotulo } from "@/components/clientes/campos-dinamicos";
 
 const nucleoVazio = { nome: "", contato: "", email: "" };
+const CONTROLE = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/15";
 
 export default function ClientesEngenharia() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -59,22 +60,31 @@ export default function ClientesEngenharia() {
         </div>
       </div>
 
-      <Card className="mt-6 p-5">
-        <div className="flex items-center gap-2">
+      <Card className="mt-6 p-6">
+        <div className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-50 text-primary"><Plus size={18} /></div>
           <div>
             <h2 className="font-semibold text-slate-800">Novo cliente</h2>
             <p className="text-xs text-slate-500">O contrato é gerado pela GR Mapping quando o negócio fecha.</p>
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-          <input value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} placeholder="Nome / razão social" className="rounded-lg border border-slate-200 p-2.5 text-sm" />
-          <input value={form.contato} onChange={(e) => setForm({ ...form, contato: e.target.value })} placeholder="WhatsApp com DDD" className="rounded-lg border border-slate-200 p-2.5 text-sm" />
-          <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="E-mail" className="rounded-lg border border-slate-200 p-2.5 text-sm" />
+        <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-3">
+            <label className="text-xs font-medium text-slate-600">Nome / razão social</label>
+            <input value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} placeholder="Ex: Construtora Marquise S/A" className={CONTROLE} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-slate-600">WhatsApp com DDD</label>
+            <input value={form.contato} onChange={(e) => setForm({ ...form, contato: e.target.value })} placeholder="(85) 99999-9999" className={CONTROLE} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-slate-600">E-mail</label>
+            <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="contato@empresa.com" className={CONTROLE} />
+          </div>
           <CamposDinamicos campos={campos} valores={extras} onChange={(k, v) => setExtras((atual) => ({ ...atual, [k]: v }))} />
         </div>
-        <div className="mt-4">
-          <Button onClick={adicionar} disabled={salvando}><Plus size={16} />{salvando ? "Salvando..." : "Adicionar"}</Button>
+        <div className="mt-5 flex justify-end border-t border-slate-100 pt-4">
+          <Button onClick={adicionar} disabled={salvando}><Plus size={16} />{salvando ? "Salvando..." : "Adicionar cliente"}</Button>
         </div>
       </Card>
 

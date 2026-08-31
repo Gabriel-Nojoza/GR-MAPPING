@@ -10,6 +10,18 @@ import {
 } from "@/lib/api";
 import { BADGE_CORES, MODULOS, type CampoEng, type Ctx } from "@/lib/eng-recursos";
 
+const CONTROLE = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/15";
+const spanClasse = (c?: 1 | 2 | 3) => (c === 3 ? "sm:col-span-2 lg:col-span-3" : c === 2 ? "sm:col-span-2" : "");
+
+function Campo({ label, span, children }: { label: string; span?: 1 | 2 | 3; children: React.ReactNode }) {
+  return (
+    <div className={`flex flex-col gap-1.5 ${spanClasse(span)}`}>
+      <label className="text-xs font-medium text-slate-600">{label}</label>
+      {children}
+    </div>
+  );
+}
+
 export function RecursoCrud({ tipo, topo }: { tipo: string; topo?: React.ReactNode }) {
   const modulo = MODULOS[tipo];
   const [lista, setLista] = useState<RecursoEng[]>([]);
@@ -79,44 +91,43 @@ export function RecursoCrud({ tipo, topo }: { tipo: string; topo?: React.ReactNo
     if (window.confirm("Excluir este registro?")) { await excluirRecursoEng(tipo, id); void carregar(); }
   }
 
-  const colSpan = (c?: 1 | 2 | 3) => (c === 3 ? "md:col-span-3" : c === 2 ? "md:col-span-2" : "");
-
   function renderCampo(campo: CampoEng) {
     const valor = dados[campo.key] ?? "";
-    const base = "rounded-lg border border-slate-200 p-2.5 text-sm";
+    const onChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setCampo(campo.key, e.target.value);
+    let control: React.ReactNode;
+
     if (campo.tipo === "textarea") {
-      return <textarea key={campo.key} value={valor} onChange={(e) => setCampo(campo.key, e.target.value)} placeholder={campo.label} rows={2} className={`${base} ${colSpan(campo.col)}`} />;
-    }
-    if (campo.tipo === "select") {
-      return (
-        <select key={campo.key} value={valor} onChange={(e) => setCampo(campo.key, e.target.value)} className={`${base} ${colSpan(campo.col)}`} aria-label={campo.label}>
-          <option value="">{campo.label}</option>
+      control = <textarea value={valor} onChange={onChange} placeholder={campo.placeholder ?? ""} rows={2} className={CONTROLE} />;
+    } else if (campo.tipo === "select") {
+      control = (
+        <select value={valor} onChange={onChange} className={CONTROLE}>
+          <option value="">Selecione</option>
           {campo.opcoes?.map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
       );
-    }
-    if (campo.tipo === "obra") {
-      return (
-        <select key={campo.key} value={valor} onChange={(e) => setCampo(campo.key, e.target.value)} className={`${base} ${colSpan(campo.col)}`} aria-label="Obra" disabled={obras.length === 0}>
+    } else if (campo.tipo === "obra") {
+      control = (
+        <select value={valor} onChange={onChange} className={CONTROLE} disabled={obras.length === 0}>
           <option value="">{obras.length === 0 ? "Cadastre uma obra primeiro" : "Vincular a uma obra"}</option>
           {obras.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}
         </select>
       );
+    } else {
+      const inputTipo = campo.tipo === "data" ? "date" : campo.tipo === "texto" ? "text" : "number";
+      const step = campo.tipo === "moeda" ? "0.01" : campo.tipo === "numero" ? "any" : undefined;
+      control = (
+        <input
+          type={inputTipo}
+          step={step}
+          min={campo.tipo === "moeda" || campo.tipo === "numero" ? "0" : undefined}
+          value={valor}
+          onChange={onChange}
+          placeholder={campo.placeholder ?? ""}
+          className={CONTROLE}
+        />
+      );
     }
-    const inputTipo = campo.tipo === "data" ? "date" : campo.tipo === "texto" ? "text" : "number";
-    const step = campo.tipo === "moeda" ? "0.01" : campo.tipo === "numero" ? "any" : undefined;
-    return (
-      <input
-        key={campo.key}
-        type={inputTipo}
-        step={step}
-        min={campo.tipo === "moeda" || campo.tipo === "numero" ? "0" : undefined}
-        value={valor}
-        onChange={(e) => setCampo(campo.key, e.target.value)}
-        placeholder={campo.placeholder ?? campo.label}
-        className={`${base} ${colSpan(campo.col)}`}
-      />
-    );
+    return <Campo key={campo.key} label={campo.label} span={campo.col}>{control}</Campo>;
   }
 
   function renderCelula(r: RecursoEng, texto: string, tipoCol?: string) {
@@ -161,8 +172,8 @@ export function RecursoCrud({ tipo, topo }: { tipo: string; topo?: React.ReactNo
 
       {topo}
 
-      <Card className="mt-6 p-5">
-        <div className="flex items-center gap-2">
+      <Card className="mt-6 p-6">
+        <div className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-50 text-primary"><Plus size={18} /></div>
           <div>
             <h2 className="font-semibold text-slate-800">Novo registro</h2>
@@ -170,12 +181,14 @@ export function RecursoCrud({ tipo, topo }: { tipo: string; topo?: React.ReactNo
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-          <input value={nome} onChange={(e) => setNome(e.target.value)} placeholder={modulo.nomePlaceholder} aria-label={modulo.nomeLabel} className="rounded-lg border border-slate-200 p-2.5 text-sm md:col-span-3" />
+        <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <Campo label={modulo.nomeLabel} span={3}>
+            <input value={nome} onChange={(e) => setNome(e.target.value)} placeholder={modulo.nomePlaceholder} className={CONTROLE} />
+          </Campo>
           {modulo.campos.map(renderCampo)}
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-3">
+        <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4">
           <label className={`flex cursor-pointer items-center gap-2 rounded-lg border border-dashed px-3 py-2 text-sm hover:border-primary hover:text-primary ${modulo.imagemDestaque ? "border-primary/50 text-primary" : "border-slate-300 text-slate-600"}`}>
             <ImagePlus size={16} />
             {imagem ? imagem.name : modulo.imagemDestaque ? "Adicionar imagem" : "Adicionar imagem (opcional)"}
