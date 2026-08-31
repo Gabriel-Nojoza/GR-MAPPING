@@ -49,7 +49,7 @@ export default function ClientesEngenharia() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="mx-auto max-w-[100rem]">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Clientes</h1>
@@ -68,8 +68,8 @@ export default function ClientesEngenharia() {
             <p className="text-xs text-slate-500">O contrato é gerado pela GR Mapping quando o negócio fecha.</p>
           </div>
         </div>
-        <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-3">
+        <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+          <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-3 2xl:col-span-4">
             <label className="text-xs font-medium text-slate-600">Nome / razão social</label>
             <input value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} placeholder="Ex: Construtora Marquise S/A" className={CONTROLE} />
           </div>

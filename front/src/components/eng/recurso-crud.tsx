@@ -11,7 +11,7 @@ import {
 import { BADGE_CORES, MODULOS, type CampoEng, type Ctx } from "@/lib/eng-recursos";
 
 const CONTROLE = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/15";
-const spanClasse = (c?: 1 | 2 | 3) => (c === 3 ? "sm:col-span-2 lg:col-span-3" : c === 2 ? "sm:col-span-2" : "");
+const spanClasse = (c?: 1 | 2 | 3) => (c === 3 ? "sm:col-span-2 lg:col-span-3 2xl:col-span-4" : c === 2 ? "sm:col-span-2" : "");
 
 function Campo({ label, span, children }: { label: string; span?: 1 | 2 | 3; children: React.ReactNode }) {
   return (
@@ -155,7 +155,7 @@ export function RecursoCrud({ tipo, topo }: { tipo: string; topo?: React.ReactNo
   }
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="mx-auto max-w-[100rem]">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">{modulo.titulo}</h1>
@@ -181,7 +181,7 @@ export function RecursoCrud({ tipo, topo }: { tipo: string; topo?: React.ReactNo
           </div>
         </div>
 
-        <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
           <Campo label={modulo.nomeLabel} span={3}>
             <input value={nome} onChange={(e) => setNome(e.target.value)} placeholder={modulo.nomePlaceholder} className={CONTROLE} />
           </Campo>
