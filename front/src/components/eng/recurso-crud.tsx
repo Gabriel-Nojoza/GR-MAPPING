@@ -155,7 +155,7 @@ export function RecursoCrud({ tipo, topo }: { tipo: string; topo?: React.ReactNo
   }
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto max-w-7xl">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">{modulo.titulo}</h1>
