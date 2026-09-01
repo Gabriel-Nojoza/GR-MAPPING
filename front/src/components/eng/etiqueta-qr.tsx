@@ -29,14 +29,16 @@ export function EtiquetaQr({
     if (!w) return;
     w.document.write(`<!doctype html><html><head><title>Etiqueta ${numero}</title>
       <style>
-        @page { size: A4; margin: 12mm; }
-        body { font-family: system-ui, sans-serif; text-align: center; }
-        .num { font-size: 120px; font-weight: 800; letter-spacing: 2px; margin: 8px 0 0; }
-        .nome { font-size: 22px; color: #333; }
-        svg { width: 90vw; max-width: 700px; height: auto; }
-        .aviso { margin-top: 16px; font-size: 13px; color: #666; }
+        @page { size: A4 portrait; margin: 8mm; }
+        html, body { height: 100%; }
+        body { font-family: system-ui, sans-serif; text-align: center; margin: 0;
+               display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        svg { width: 94vw; max-width: 190mm; height: auto; }
+        .num { font-size: 64px; font-weight: 800; letter-spacing: 2px; margin: 6px 0 0; }
+        .nome { font-size: 18px; color: #333; }
+        .aviso { position: fixed; bottom: 6mm; left: 0; right: 0; font-size: 11px; color: #888; }
       </style></head><body>${html}
-      <p class="aviso">Imprima em tamanho grande (≥ 1 m), material fosco. Fixe no teto da máquina, virado pra cima.</p>
+      <p class="aviso">Teste: fosco, esticado, sem reflexo. Voo baixo (10–15 m). Versão final: lona ≥ 1 m.</p>
       <script>window.onload = () => { window.print(); }</script>
       </body></html>`);
     w.document.close();
