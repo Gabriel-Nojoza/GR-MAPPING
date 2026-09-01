@@ -9,5 +9,5 @@ python-dotenv
 psycopg[binary]
 psycopg-pool
 PyJWT
-opencv-python-headless
+opencv-contrib-python-headless
 numpy
