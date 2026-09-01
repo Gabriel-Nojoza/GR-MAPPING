@@ -236,22 +236,20 @@ export function RecursoCrud({ tipo, topo }: { tipo: string; topo?: React.ReactNo
                         <span className="grid size-11 place-items-center rounded-lg bg-slate-100 text-slate-400"><ImageIcon size={16} /></span>
                       )}
                       <span className="font-medium text-slate-700">{r.nome}</span>
+                      {modulo.etiquetaQr && (
+                        <button
+                          onClick={() => setEtiqueta({ id: r.id, nome: r.nome, numero: String(lista.length - lista.indexOf(r)).padStart(2, "0") })}
+                          className="flex shrink-0 items-center gap-1 rounded-full bg-indigo-50 px-2 py-1 text-xs font-medium text-primary hover:bg-indigo-100"
+                          title="Gerar etiqueta QR"
+                        ><QrCode size={13} /> QR</button>
+                      )}
                     </div>
                   </td>
                   {modulo.colunas.map((c) => (
                     <td key={c.label} className="px-5 py-4">{renderCelula(r, c.valor(r, ctx), c.tipo)}</td>
                   ))}
                   <td className="px-5 py-4 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      {modulo.etiquetaQr && (
-                        <button
-                          onClick={() => setEtiqueta({ id: r.id, nome: r.nome, numero: String(lista.length - lista.indexOf(r)).padStart(2, "0") })}
-                          className="rounded-lg p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-primary"
-                          title="Etiqueta QR"
-                        ><QrCode size={17} /></button>
-                      )}
-                      <button onClick={() => apagar(r.id)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Excluir"><Trash2 size={17} /></button>
-                    </div>
+                    <button onClick={() => apagar(r.id)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Excluir"><Trash2 size={17} /></button>
                   </td>
                 </tr>
               ))}
