@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Plane, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -11,6 +12,7 @@ const CONTROLE = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5
 const hoje = () => new Date().toISOString().slice(0, 10);
 
 export default function VoosPage() {
+  const router = useRouter();
   const [obras, setObras] = useState<RecursoEng[]>([]);
   const [voos, setVoos] = useState<Voo[]>([]);
   const [erro, setErro] = useState("");
@@ -32,10 +34,8 @@ export default function VoosPage() {
     try {
       setSalvando(true); setErro("");
       const v = await criarVoo(form);
-      setVoos((atual) => [v, ...atual]);
-      setForm((f) => ({ ...f, observacao: "" }));
-    } catch (e) { setErro(e instanceof Error ? e.message : "Não foi possível criar o voo."); }
-    finally { setSalvando(false); }
+      router.push(`/eng/voos/${v.id}`);
+    } catch (e) { setErro(e instanceof Error ? e.message : "Não foi possível criar o voo."); setSalvando(false); }
   }
 
   async function apagar(id: string) {
@@ -50,7 +50,10 @@ export default function VoosPage() {
       <Card className="mt-6 p-6">
         <div className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-50 text-primary"><Plane size={18} /></div>
-          <h2 className="font-semibold text-slate-800">Novo voo</h2>
+          <div>
+            <h2 className="font-semibold text-slate-800">Novo voo</h2>
+            <p className="text-xs text-slate-500">Depois de criar, você já cai na tela pra subir as fotos.</p>
+          </div>
         </div>
         <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="flex flex-col gap-1.5 sm:col-span-2">
@@ -87,12 +90,12 @@ export default function VoosPage() {
             <thead>
               <tr className="border-b border-slate-100 text-xs text-slate-400">
                 <th className="px-5 py-3">Data</th><th className="px-5 py-3">Turno</th><th className="px-5 py-3">Obra</th>
-                <th className="px-5 py-3">Fotos</th><th className="px-5 py-3">Máquinas marcadas</th><th className="px-5 py-3" />
+                <th className="px-5 py-3">Fotos</th><th className="px-5 py-3">Máquinas marcadas</th><th className="px-5 py-3" /><th className="px-5 py-3" />
               </tr>
             </thead>
             <tbody>
               {voos.length === 0 ? (
-                <tr><td colSpan={6} className="px-5 py-12 text-center text-slate-400">Nenhum voo ainda.</td></tr>
+                <tr><td colSpan={7} className="px-5 py-12 text-center text-slate-400">Nenhum voo ainda.</td></tr>
               ) : voos.map((v) => (
                 <tr key={v.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                   <td className="px-5 py-4"><Link href={`/eng/voos/${v.id}`} className="font-medium text-primary hover:underline">{new Date(v.data + "T00:00:00").toLocaleDateString("pt-BR")}</Link></td>
@@ -100,6 +103,7 @@ export default function VoosPage() {
                   <td className="px-5 py-4 text-slate-600">{obraNome.get(v.obra_id) ?? "—"}</td>
                   <td className="px-5 py-4 text-slate-500">{v.total_fotos} <span className="text-xs text-slate-400">({v.fotos_com_gps} c/ GPS)</span></td>
                   <td className="px-5 py-4 text-slate-500">{v.total_deteccoes}</td>
+                  <td className="px-5 py-4"><Link href={`/eng/voos/${v.id}`} className="rounded-lg bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-primary hover:bg-indigo-100">Abrir / subir fotos</Link></td>
                   <td className="px-5 py-4 text-right"><button onClick={() => apagar(v.id)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 size={16} /></button></td>
                 </tr>
               ))}
