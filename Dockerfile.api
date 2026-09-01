@@ -7,7 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 COPY requirements.txt .
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg \
+    && apt-get install -y --no-install-recommends ffmpeg libglib2.0-0 libgl1 \
     && pip install --no-cache-dir -r requirements.txt \
     && rm -rf /var/lib/apt/lists/*
 

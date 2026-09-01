@@ -37,6 +37,7 @@ load_dotenv()  # lê o .env local (GEMINI_API_KEY) antes de qualquer coisa
 
 from app import db, ramos
 from app.metadata import read_photo_metadata, PhotoMetadata, dados_foto_voo
+from app import qr as leitor_qr
 from app.gsd import compute_gsd
 from app.area import area_do_poligono
 from app.ia_projeto import (
@@ -1335,10 +1336,19 @@ def excluir_voo(voo_id: str):
 
 
 @app.post("/eng/voos/{voo_id}/fotos")
-def enviar_fotos_voo(voo_id: str, fotos: list[UploadFile] = File(...)):
-    if db.obter_voo(voo_id) is None:
+def enviar_fotos_voo(voo_id: str, fotos: list[UploadFile] = File(...),
+                     contexto: dict | None = Depends(contexto_usuario)):
+    voo = db.obter_voo(voo_id)
+    if voo is None:
         raise HTTPException(status_code=404, detail="voo não encontrado")
-    salvas = []
+
+    empresa_id = _empresa_do_contexto(contexto)
+    maquinas_validas = {r["id"] for r in db.listar_recursos_eng(empresa_id, "equipamento")}
+    frente = _frente_da_obra(voo["obra_id"], None)
+    coords_frente = _linha_da_frente(frente["geojson"]) if frente else []
+    ja_detectadas = {d["maquina_id"] for d in db.listar_deteccoes(voo_id) if d["metodo"] == "qr"}
+
+    salvas, qrs_lidos = 0, 0
     for foto in fotos:
         if foto.content_type not in {"image/jpeg", "image/png", "image/webp"}:
             continue
@@ -1355,8 +1365,27 @@ def enviar_fotos_voo(voo_id: str, fotos: list[UploadFile] = File(...)):
             meta = {"gps_lat": None, "gps_lon": None, "altitude_m": None, "tirada_em": None}
         db.adicionar_foto_voo(foto_id, voo_id, foto.filename or "foto.jpg", foto.content_type,
                               meta["gps_lat"], meta["gps_lon"], meta["altitude_m"], meta["tirada_em"])
-        salvas.append(foto_id)
-    return {"ok": True, "adicionadas": len(salvas)}
+        salvas += 1
+
+        # leitura automática do QR (best-effort)
+        try:
+            achados = leitor_qr.ler_qrs(caminho)
+        except Exception:
+            achados = []
+        if achados:
+            db.marcar_foto_qr(foto_id)
+        for item in achados:
+            mid = leitor_qr.id_maquina(item["texto"])
+            if not mid or mid not in maquinas_validas or mid in ja_detectadas:
+                continue
+            lat, lon = meta["gps_lat"], meta["gps_lon"]
+            prog = _progressiva(coords_frente, lat, lon) if coords_frente else None
+            db.criar_deteccao(uuid.uuid4().hex, voo_id, foto_id, mid,
+                              frente["id"] if frente else None, lat, lon, prog, "qr", None)
+            ja_detectadas.add(mid)
+            qrs_lidos += 1
+
+    return {"ok": True, "adicionadas": salvas, "qrs_lidos": qrs_lidos, "leitor_ativo": leitor_qr.disponivel()}
 
 
 @app.get("/eng/voos/{voo_id}/fotos/{foto_id}/imagem")

@@ -1139,6 +1139,11 @@ def obter_foto_voo(id_: str) -> sqlite3.Row | None:
         return conn.execute("SELECT * FROM eng_voo_fotos WHERE id = ?", (id_,)).fetchone()
 
 
+def marcar_foto_qr(id_: str) -> None:
+    with _conectar() as conn:
+        conn.execute("UPDATE eng_voo_fotos SET tem_qr = 1 WHERE id = ?", (id_,))
+
+
 def criar_deteccao(id_: str, voo_id: str, foto_id: str | None, maquina_id: str,
                    frente_id: str | None, lat: float | None, lon: float | None,
                    progressiva_m: float | None, metodo: str, status_maquina: str | None) -> None:

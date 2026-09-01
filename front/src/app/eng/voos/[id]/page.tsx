@@ -7,7 +7,8 @@ import { ArrowLeft, ImagePlus, MapPin, Trash2, Upload } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Mapa } from "@/components/eng/mapa";
 import {
-  criarDeteccao, enviarFotosVoo, excluirDeteccao, fotoVooUrl, getFrentes, getRecursosEng, getVoo,
+  atualizarDeteccao, criarDeteccao, enviarFotosVoo, excluirDeteccao, fotoVooUrl,
+  getFrentes, getRecursosEng, getVoo,
   type Deteccao, type Frente, type RecursoEng, type Voo,
 } from "@/lib/api";
 
@@ -19,6 +20,7 @@ export default function VooDetalhe() {
   const [frenteId, setFrenteId] = useState("");
   const [maquinaSel, setMaquinaSel] = useState("");
   const [subindo, setSubindo] = useState(false);
+  const [aviso, setAviso] = useState("");
   const [erro, setErro] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -54,9 +56,16 @@ export default function VooDetalhe() {
   async function upload(files: FileList | null) {
     if (!files?.length) return;
     try {
-      setSubindo(true); setErro("");
-      await enviarFotosVoo(id, Array.from(files));
+      setSubindo(true); setErro(""); setAviso("");
+      const r = await enviarFotosVoo(id, Array.from(files));
       if (fileRef.current) fileRef.current.value = "";
+      setAviso(
+        r.qrs_lidos > 0
+          ? `${r.adicionadas} foto(s) · ${r.qrs_lidos} máquina(s) identificada(s) pelo QR automaticamente.`
+          : r.leitor_ativo
+            ? `${r.adicionadas} foto(s) · nenhum QR lido — marque as máquinas no mapa.`
+            : `${r.adicionadas} foto(s) enviada(s).`,
+      );
       await carregar();
     } catch (e) { setErro(e instanceof Error ? e.message : "Falha no upload."); }
     finally { setSubindo(false); }
@@ -65,7 +74,9 @@ export default function VooDetalhe() {
   async function marcar(lat: number, lon: number) {
     if (!maquinaSel) { setErro("Escolha a máquina antes de clicar no mapa."); return; }
     try {
-      await criarDeteccao(id, { maquina_id: maquinaSel, frente_id: frenteId || undefined, lat, lon });
+      const semPos = (voo?.deteccoes ?? []).find((d) => d.maquina_id === maquinaSel && d.lat == null);
+      if (semPos) await atualizarDeteccao(semPos.id, { maquina_id: maquinaSel, frente_id: frenteId || undefined, lat, lon });
+      else await criarDeteccao(id, { maquina_id: maquinaSel, frente_id: frenteId || undefined, lat, lon });
       await carregar();
     } catch (e) { setErro(e instanceof Error ? e.message : "Não foi possível marcar."); }
   }
@@ -109,9 +120,10 @@ export default function VooDetalhe() {
             <h2 className="flex items-center gap-2 font-semibold text-slate-800"><Upload size={16} className="text-primary" /> Fotos do voo</h2>
             <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 p-6 text-sm text-slate-500 hover:border-primary hover:text-primary">
               <ImagePlus size={18} />
-              {subindo ? "Enviando…" : "Selecionar fotos do voo (várias)"}
+              {subindo ? "Enviando e lendo os QRs…" : "Selecionar fotos do voo (várias)"}
               <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" multiple className="hidden" onChange={(e) => upload(e.target.files)} />
             </label>
+            {aviso && <p className="mt-2 rounded-lg bg-indigo-50 px-3 py-2 text-xs text-primary">{aviso}</p>}
           </Card>
 
           <Card className="p-5">
@@ -131,10 +143,15 @@ export default function VooDetalhe() {
                 {(voo.deteccoes ?? []).map((d) => (
                   <div key={d.id} className="flex items-center justify-between gap-2 p-3 text-sm">
                     <div className="flex items-center gap-2">
-                      <MapPin size={14} className={d.status_maquina === "parada" ? "text-red-500" : "text-primary"} />
+                      <MapPin size={14} className={d.lat == null ? "text-amber-500" : d.status_maquina === "parada" ? "text-red-500" : "text-primary"} />
                       <div>
-                        <p className="font-medium text-slate-700">{maqNome.get(d.maquina_id) ?? "Máquina"}</p>
-                        <p className="text-xs text-slate-400">{d.progressiva_m != null ? `estaca ${d.progressiva_m} m` : d.lat?.toFixed(5) + ", " + d.lon?.toFixed(5)}</p>
+                        <p className="flex items-center gap-1.5 font-medium text-slate-700">
+                          {maqNome.get(d.maquina_id) ?? "Máquina"}
+                          {d.metodo === "qr" && <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">QR</span>}
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          {d.lat == null ? "sem posição — clique no mapa" : d.progressiva_m != null ? `estaca ${d.progressiva_m} m` : `${d.lat.toFixed(5)}, ${d.lon?.toFixed(5)}`}
+                        </p>
                       </div>
                     </div>
                     <button onClick={() => removerDet(d)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 size={15} /></button>
