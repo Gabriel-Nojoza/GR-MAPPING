@@ -1320,8 +1320,16 @@ def obter_voo(voo_id: str):
     if voo is None:
         raise HTTPException(status_code=404, detail="voo não encontrado")
     resultado = _voo_resposta(voo)
-    resultado["fotos"] = [dict(f) for f in db.listar_fotos_voo(voo_id)]
-    resultado["deteccoes"] = [dict(d) for d in db.listar_deteccoes(voo_id)]
+    fotos = [dict(f) for f in db.listar_fotos_voo(voo_id)]
+    por_id = {f["id"]: f for f in fotos}
+    deteccoes = []
+    for d in db.listar_deteccoes(voo_id):
+        d = dict(d)
+        foto = por_id.get(d.get("foto_id"))
+        d["foto_tirada_em"] = foto["tirada_em"] if foto else None
+        deteccoes.append(d)
+    resultado["fotos"] = fotos
+    resultado["deteccoes"] = deteccoes
     return resultado
 
 

@@ -37,6 +37,9 @@ export default function VooDetalhe() {
   useEffect(() => { void carregar(); }, [carregar]);
 
   const maqNome = useMemo(() => new Map(maquinas.map((m) => [m.id, m.nome])), [maquinas]);
+  const qrDets = (voo?.deteccoes ?? []).filter((d) => d.metodo === "qr");
+  const manuaisDets = (voo?.deteccoes ?? []).filter((d) => d.metodo !== "qr");
+  const semGps = !!voo && voo.total_fotos > 0 && voo.fotos_com_gps === 0;
   const frente = frentes.find((f) => f.id === frenteId);
   const linha = frente?.geojson?.coordinates ?? null;
 
@@ -124,42 +127,68 @@ export default function VooDetalhe() {
               <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" multiple className="hidden" onChange={(e) => upload(e.target.files)} />
             </label>
             {aviso && <p className="mt-2 rounded-lg bg-indigo-50 px-3 py-2 text-xs text-primary">{aviso}</p>}
+            {semGps && (
+              <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                Nenhuma foto tem GPS. Screenshots e frames de vídeo perdem o GPS — use os arquivos originais <b>.JPG</b> do cartão SD. Sem GPS, posicione as máquinas clicando no mapa.
+              </p>
+            )}
+          </Card>
+
+          <Card className="p-0">
+            <div className="border-b border-slate-100 p-4">
+              <h2 className="font-semibold text-slate-800">Máquinas identificadas pelo QR</h2>
+              <p className="text-xs text-slate-500">{qrDets.length} lida(s) automaticamente</p>
+            </div>
+            {qrDets.length === 0 ? (
+              <p className="p-4 text-sm text-slate-400">Nenhuma ainda. Suba as fotos ou marque na mão abaixo.</p>
+            ) : (
+              <div className="divide-y divide-slate-50">
+                {qrDets.map((d) => (
+                  <div key={d.id} className="flex items-center justify-between gap-2 p-3 text-sm">
+                    <div className="flex items-center gap-2.5">
+                      <MapPin size={15} className={d.lat == null ? "text-amber-500" : "text-emerald-600"} />
+                      <div>
+                        <p className="font-medium text-slate-700">{maqNome.get(d.maquina_id) ?? "Máquina"}</p>
+                        <p className="text-xs text-slate-400">
+                          {d.foto_tirada_em ? new Date(d.foto_tirada_em).toLocaleString("pt-BR") + " · " : ""}
+                          {d.lat == null
+                            ? <span className="text-amber-600">sem posição</span>
+                            : d.progressiva_m != null ? `estaca ${d.progressiva_m} m` : "posicionada"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {d.lat == null && (
+                        <button onClick={() => { setMaquinaSel(d.maquina_id); setAviso("Agora clique no mapa onde a máquina estava."); }} className="rounded-lg bg-indigo-50 px-2 py-1 text-xs font-medium text-primary hover:bg-indigo-100">posicionar</button>
+                      )}
+                      <button onClick={() => removerDet(d)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 size={14} /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </Card>
 
           <Card className="p-5">
-            <h2 className="font-semibold text-slate-800">Marcar máquina</h2>
+            <h2 className="font-semibold text-slate-800">Marcar na mão</h2>
+            <p className="text-xs text-slate-500">Pra máquina que o QR não pegou.</p>
             <label className="mt-3 block text-xs font-medium text-slate-600">Máquina</label>
             <select value={maquinaSel} onChange={(e) => setMaquinaSel(e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm">
               {maquinas.length === 0 && <option value="">Cadastre máquinas primeiro</option>}
               {maquinas.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
             </select>
-            <p className="mt-2 text-xs text-slate-500">Clique no mapa na posição da máquina.</p>
-          </Card>
-
-          {(voo.deteccoes ?? []).length > 0 && (
-            <Card className="p-0">
-              <div className="border-b border-slate-100 p-4"><h2 className="font-semibold text-slate-800">Marcações deste voo</h2></div>
-              <div className="divide-y divide-slate-50">
-                {(voo.deteccoes ?? []).map((d) => (
-                  <div key={d.id} className="flex items-center justify-between gap-2 p-3 text-sm">
-                    <div className="flex items-center gap-2">
-                      <MapPin size={14} className={d.lat == null ? "text-amber-500" : d.status_maquina === "parada" ? "text-red-500" : "text-primary"} />
-                      <div>
-                        <p className="flex items-center gap-1.5 font-medium text-slate-700">
-                          {maqNome.get(d.maquina_id) ?? "Máquina"}
-                          {d.metodo === "qr" && <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">QR</span>}
-                        </p>
-                        <p className="text-xs text-slate-400">
-                          {d.lat == null ? "sem posição — clique no mapa" : d.progressiva_m != null ? `estaca ${d.progressiva_m} m` : `${d.lat.toFixed(5)}, ${d.lon?.toFixed(5)}`}
-                        </p>
-                      </div>
-                    </div>
-                    <button onClick={() => removerDet(d)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 size={15} /></button>
+            <p className="mt-2 text-xs text-slate-500">Selecione e clique no mapa na posição da máquina.</p>
+            {manuaisDets.length > 0 && (
+              <div className="mt-3 divide-y divide-slate-50 border-t border-slate-100">
+                {manuaisDets.map((d) => (
+                  <div key={d.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+                    <span className="text-slate-600">{maqNome.get(d.maquina_id) ?? "Máquina"} · <span className="text-xs text-slate-400">{d.progressiva_m != null ? `estaca ${d.progressiva_m} m` : "no mapa"}</span></span>
+                    <button onClick={() => removerDet(d)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 size={14} /></button>
                   </div>
                 ))}
               </div>
-            </Card>
-          )}
+            )}
+          </Card>
         </div>
       </div>
 
