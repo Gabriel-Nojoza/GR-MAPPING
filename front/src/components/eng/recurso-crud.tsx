@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ImagePlus, ImageIcon, Plus, Search, Trash2 } from "lucide-react";
+import { ImagePlus, ImageIcon, Plus, QrCode, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { EtiquetaQr } from "@/components/eng/etiqueta-qr";
 import {
   criarRecursoEng, enviarFotoRecursoEng, excluirRecursoEng, getRecursosEng,
   recursoEngFotoUrl, type RecursoEng,
@@ -32,6 +33,7 @@ export function RecursoCrud({ tipo, topo }: { tipo: string; topo?: React.ReactNo
   const [nome, setNome] = useState("");
   const [dados, setDados] = useState<Record<string, string>>({});
   const [imagem, setImagem] = useState<File | null>(null);
+  const [etiqueta, setEtiqueta] = useState<{ id: string; nome: string; numero: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const usaObra = useMemo(() => modulo.campos.some((c) => c.tipo === "obra"), [modulo]);
@@ -240,7 +242,16 @@ export function RecursoCrud({ tipo, topo }: { tipo: string; topo?: React.ReactNo
                     <td key={c.label} className="px-5 py-4">{renderCelula(r, c.valor(r, ctx), c.tipo)}</td>
                   ))}
                   <td className="px-5 py-4 text-right">
-                    <button onClick={() => apagar(r.id)} className="text-slate-400 hover:text-red-600"><Trash2 size={17} /></button>
+                    <div className="flex items-center justify-end gap-1">
+                      {modulo.etiquetaQr && (
+                        <button
+                          onClick={() => setEtiqueta({ id: r.id, nome: r.nome, numero: String(lista.length - lista.indexOf(r)).padStart(2, "0") })}
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-primary"
+                          title="Etiqueta QR"
+                        ><QrCode size={17} /></button>
+                      )}
+                      <button onClick={() => apagar(r.id)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Excluir"><Trash2 size={17} /></button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -249,6 +260,7 @@ export function RecursoCrud({ tipo, topo }: { tipo: string; topo?: React.ReactNo
         </div>
       </Card>
       {erro && <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</p>}
+      {etiqueta && <EtiquetaQr {...etiqueta} onFechar={() => setEtiqueta(null)} />}
     </div>
   );
 }

@@ -41,6 +41,7 @@ export type ModuloEng = {
   nomeLabel: string;
   nomePlaceholder: string;
   imagemDestaque?: boolean;
+  etiquetaQr?: boolean;
   campos: CampoEng[];
   colunas: ColunaEng[];
   resumo: ResumoEng[];
@@ -97,10 +98,11 @@ export const MODULOS: Record<string, ModuloEng> = {
 
   equipamento: {
     tipo: "equipamento",
-    titulo: "Equipamentos",
-    descricao: "Máquinas em campo, utilização e custo por equipamento.",
-    nomeLabel: "Equipamento",
+    titulo: "Máquinas",
+    descricao: "Máquinas da obra — cada uma com uma etiqueta QR pro drone identificar.",
+    nomeLabel: "Máquina",
     nomePlaceholder: "Ex: Escavadeira CAT 320",
+    etiquetaQr: true,
     campos: [
       { key: "tipo_equip", label: "Tipo", tipo: "select", col: 1, opcoes: ["Escavadeira", "Retroescavadeira", "Motoniveladora", "Rolo compactador", "Caminhão", "Trator", "Betoneira", "Outro"] },
       { key: "obra", label: "Obra", tipo: "obra", col: 1 },
@@ -185,6 +187,30 @@ export const MODULOS: Record<string, ModuloEng> = {
     ],
   },
 
+  trabalhador: {
+    tipo: "trabalhador",
+    titulo: "Trabalhadores",
+    descricao: "Equipe de campo — identificada pela cor do capacete quando o drone passa.",
+    nomeLabel: "Nome do trabalhador",
+    nomePlaceholder: "Ex: José da Silva",
+    campos: [
+      { key: "funcao", label: "Função", tipo: "select", col: 1, opcoes: ["Engenheiro", "Encarregado", "Operador", "Ajudante", "Topógrafo", "Motorista", "Outro"] },
+      { key: "cor_capacete", label: "Cor do capacete", tipo: "select", col: 1, opcoes: ["Branco", "Azul", "Amarelo", "Verde", "Vermelho", "Laranja"] },
+      { key: "obra", label: "Obra", tipo: "obra", col: 1 },
+      { key: "telefone", label: "Telefone", tipo: "texto", col: 1 },
+    ],
+    colunas: [
+      { label: "Função", tipo: "badge", valor: (r) => t(r, "funcao") },
+      { label: "Capacete", tipo: "badge", valor: (r) => t(r, "cor_capacete") },
+      { label: "Obra", valor: (r, c) => c.obraNome(r.dados.obra) },
+      { label: "Telefone", valor: (r) => t(r, "telefone") },
+    ],
+    resumo: [
+      { label: "trabalhador(es)", valor: (rs) => String(rs.length) },
+      { label: "operadores", cor: "amber", valor: (rs) => String(rs.filter((r) => r.dados.funcao === "Operador").length) },
+    ],
+  },
+
   custo: {
     tipo: "custo",
     titulo: "Custos",
@@ -254,6 +280,15 @@ export const BADGE_CORES: Record<string, string> = {
   Combustível: "bg-amber-50 text-amber-700",
   Locação: "bg-violet-50 text-violet-700",
   Outros: "bg-slate-100 text-slate-600",
+  Branco: "bg-slate-100 text-slate-700 ring-1 ring-slate-300",
+  Azul: "bg-blue-100 text-blue-700",
+  Amarelo: "bg-yellow-100 text-yellow-800",
+  Verde: "bg-emerald-100 text-emerald-700",
+  Vermelho: "bg-red-100 text-red-700",
+  Laranja: "bg-orange-100 text-orange-700",
+  Engenheiro: "bg-indigo-50 text-indigo-700",
+  Encarregado: "bg-sky-50 text-sky-700",
+  Operador: "bg-amber-50 text-amber-700",
 };
 
 // ---- agregações (usadas em Custos e no Dashboard) ----------------------

@@ -186,6 +186,39 @@ def read_photo_metadata(path: str | Path) -> PhotoMetadata:
     )
 
 
+def dados_foto_voo(path: str | Path) -> dict:
+    """
+    Extrai o essencial pra posicionar uma foto de voo no mapa:
+    GPS, altitude de voo e horário em que a foto foi tirada.
+    Tolerante a fotos sem metadado (devolve None nos campos que faltam).
+    """
+    path = Path(path)
+    try:
+        md = read_photo_metadata(path)
+    except ValueError:
+        return {"gps_lat": None, "gps_lon": None, "altitude_m": None, "tirada_em": None}
+
+    tirada_em = None
+    try:
+        with Image.open(path) as img:
+            exif = img.getexif()
+            sub = exif.get_ifd(ExifTags.IFD.Exif) if exif else {}
+            bruto = sub.get(ExifTags.Base.DateTimeOriginal) or sub.get(36867)
+            if isinstance(bruto, str) and ":" in bruto:
+                # formato EXIF: "2026:08:31 14:32:10" -> ISO
+                data, _, hora = bruto.partition(" ")
+                tirada_em = f"{data.replace(':', '-')}T{hora}" if hora else None
+    except (OSError, UnidentifiedImageError, ValueError):
+        pass
+
+    return {
+        "gps_lat": md.gps_lat,
+        "gps_lon": md.gps_lon,
+        "altitude_m": md.relative_altitude_m,
+        "tirada_em": tirada_em,
+    }
+
+
 # ----------------------------------------------------------------------
 # helpers
 # ----------------------------------------------------------------------

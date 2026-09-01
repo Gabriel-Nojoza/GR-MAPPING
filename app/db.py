@@ -234,6 +234,72 @@ def init_db() -> None:
                 foto_mime TEXT
             )
         """)
+        # ---- monitoramento de produtividade por voo de drone (ramo engenharia) ----
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS eng_frentes (
+                id TEXT PRIMARY KEY,
+                criado_em TEXT NOT NULL,
+                empresa_id TEXT,
+                obra_id TEXT NOT NULL,
+                nome TEXT NOT NULL,
+                geojson TEXT,
+                extensao_prevista_m REAL NOT NULL DEFAULT 0
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS eng_voos (
+                id TEXT PRIMARY KEY,
+                criado_em TEXT NOT NULL,
+                empresa_id TEXT,
+                obra_id TEXT NOT NULL,
+                data TEXT NOT NULL,
+                turno TEXT NOT NULL,
+                observacao TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS eng_voo_fotos (
+                id TEXT PRIMARY KEY,
+                criado_em TEXT NOT NULL,
+                voo_id TEXT NOT NULL,
+                nome_arquivo TEXT NOT NULL,
+                mime TEXT,
+                gps_lat REAL,
+                gps_lon REAL,
+                altitude_m REAL,
+                tirada_em TEXT,
+                tem_qr INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS eng_deteccoes (
+                id TEXT PRIMARY KEY,
+                criado_em TEXT NOT NULL,
+                voo_id TEXT NOT NULL,
+                foto_id TEXT,
+                maquina_id TEXT NOT NULL,
+                frente_id TEXT,
+                lat REAL,
+                lon REAL,
+                progressiva_m REAL,
+                metodo TEXT NOT NULL DEFAULT 'manual',
+                status_maquina TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS eng_consumo (
+                id TEXT PRIMARY KEY,
+                criado_em TEXT NOT NULL,
+                empresa_id TEXT,
+                obra_id TEXT NOT NULL,
+                data TEXT NOT NULL,
+                turno TEXT NOT NULL,
+                maquina_id TEXT NOT NULL,
+                horas REAL NOT NULL DEFAULT 0,
+                custo_hora_centavos INTEGER NOT NULL DEFAULT 0,
+                UNIQUE(obra_id, data, turno, maquina_id)
+            )
+        """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS modelos_mensagem_leads (
                 id TEXT PRIMARY KEY,
@@ -971,3 +1037,172 @@ def excluir_recurso_eng(id_: str) -> bool:
     with _conectar() as conn:
         cur = conn.execute("DELETE FROM recursos_eng WHERE id = ?", (id_,))
         return cur.rowcount > 0
+
+
+# ----------------------------------------------------------------------
+# monitoramento de produtividade por voo de drone
+# ----------------------------------------------------------------------
+def criar_frente(id_: str, empresa_id: str | None, obra_id: str, nome: str,
+                 geojson: str | None, extensao_prevista_m: float) -> None:
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO eng_frentes (id, criado_em, empresa_id, obra_id, nome, geojson, extensao_prevista_m) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (id_, _agora(), empresa_id, obra_id, nome, geojson, extensao_prevista_m),
+        )
+
+
+def listar_frentes(obra_id: str) -> list[sqlite3.Row]:
+    with _conectar() as conn:
+        return conn.execute(
+            "SELECT * FROM eng_frentes WHERE obra_id = ? ORDER BY criado_em ASC", (obra_id,)
+        ).fetchall()
+
+
+def obter_frente(id_: str) -> sqlite3.Row | None:
+    with _conectar() as conn:
+        return conn.execute("SELECT * FROM eng_frentes WHERE id = ?", (id_,)).fetchone()
+
+
+def atualizar_frente(id_: str, nome: str, geojson: str | None, extensao_prevista_m: float) -> bool:
+    with _conectar() as conn:
+        cur = conn.execute(
+            "UPDATE eng_frentes SET nome = ?, geojson = ?, extensao_prevista_m = ? WHERE id = ?",
+            (nome, geojson, extensao_prevista_m, id_),
+        )
+        return cur.rowcount > 0
+
+
+def excluir_frente(id_: str) -> bool:
+    with _conectar() as conn:
+        cur = conn.execute("DELETE FROM eng_frentes WHERE id = ?", (id_,))
+        return cur.rowcount > 0
+
+
+def criar_voo(id_: str, empresa_id: str | None, obra_id: str, data: str,
+              turno: str, observacao: str | None) -> None:
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO eng_voos (id, criado_em, empresa_id, obra_id, data, turno, observacao) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (id_, _agora(), empresa_id, obra_id, data, turno, observacao),
+        )
+
+
+def listar_voos(empresa_id: str | None, obra_id: str | None = None) -> list[sqlite3.Row]:
+    consulta = "SELECT * FROM eng_voos"
+    filtros, parametros = [], []
+    if empresa_id:
+        filtros.append("empresa_id = ?"); parametros.append(empresa_id)
+    if obra_id:
+        filtros.append("obra_id = ?"); parametros.append(obra_id)
+    if filtros:
+        consulta += " WHERE " + " AND ".join(filtros)
+    consulta += " ORDER BY data DESC, criado_em DESC"
+    with _conectar() as conn:
+        return conn.execute(consulta, tuple(parametros)).fetchall()
+
+
+def obter_voo(id_: str) -> sqlite3.Row | None:
+    with _conectar() as conn:
+        return conn.execute("SELECT * FROM eng_voos WHERE id = ?", (id_,)).fetchone()
+
+
+def excluir_voo(id_: str) -> bool:
+    with _conectar() as conn:
+        conn.execute("DELETE FROM eng_deteccoes WHERE voo_id = ?", (id_,))
+        conn.execute("DELETE FROM eng_voo_fotos WHERE voo_id = ?", (id_,))
+        cur = conn.execute("DELETE FROM eng_voos WHERE id = ?", (id_,))
+        return cur.rowcount > 0
+
+
+def adicionar_foto_voo(id_: str, voo_id: str, nome_arquivo: str, mime: str | None,
+                       gps_lat: float | None, gps_lon: float | None,
+                       altitude_m: float | None, tirada_em: str | None) -> None:
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO eng_voo_fotos (id, criado_em, voo_id, nome_arquivo, mime, gps_lat, gps_lon, altitude_m, tirada_em) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (id_, _agora(), voo_id, nome_arquivo, mime, gps_lat, gps_lon, altitude_m, tirada_em),
+        )
+
+
+def listar_fotos_voo(voo_id: str) -> list[sqlite3.Row]:
+    with _conectar() as conn:
+        return conn.execute(
+            "SELECT * FROM eng_voo_fotos WHERE voo_id = ? ORDER BY tirada_em ASC, criado_em ASC", (voo_id,)
+        ).fetchall()
+
+
+def obter_foto_voo(id_: str) -> sqlite3.Row | None:
+    with _conectar() as conn:
+        return conn.execute("SELECT * FROM eng_voo_fotos WHERE id = ?", (id_,)).fetchone()
+
+
+def criar_deteccao(id_: str, voo_id: str, foto_id: str | None, maquina_id: str,
+                   frente_id: str | None, lat: float | None, lon: float | None,
+                   progressiva_m: float | None, metodo: str, status_maquina: str | None) -> None:
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO eng_deteccoes (id, criado_em, voo_id, foto_id, maquina_id, frente_id, lat, lon, progressiva_m, metodo, status_maquina) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (id_, _agora(), voo_id, foto_id, maquina_id, frente_id, lat, lon, progressiva_m, metodo, status_maquina),
+        )
+
+
+def listar_deteccoes(voo_id: str) -> list[sqlite3.Row]:
+    with _conectar() as conn:
+        return conn.execute(
+            "SELECT * FROM eng_deteccoes WHERE voo_id = ? ORDER BY criado_em ASC", (voo_id,)
+        ).fetchall()
+
+
+def obter_deteccao(id_: str) -> sqlite3.Row | None:
+    with _conectar() as conn:
+        return conn.execute("SELECT * FROM eng_deteccoes WHERE id = ?", (id_,)).fetchone()
+
+
+def atualizar_deteccao(id_: str, maquina_id: str, lat: float | None, lon: float | None,
+                       progressiva_m: float | None, status_maquina: str | None) -> bool:
+    with _conectar() as conn:
+        cur = conn.execute(
+            "UPDATE eng_deteccoes SET maquina_id = ?, lat = ?, lon = ?, progressiva_m = ?, status_maquina = ? WHERE id = ?",
+            (maquina_id, lat, lon, progressiva_m, status_maquina, id_),
+        )
+        return cur.rowcount > 0
+
+
+def excluir_deteccao(id_: str) -> bool:
+    with _conectar() as conn:
+        cur = conn.execute("DELETE FROM eng_deteccoes WHERE id = ?", (id_,))
+        return cur.rowcount > 0
+
+
+def salvar_consumo(id_: str, empresa_id: str | None, obra_id: str, data: str, turno: str,
+                   maquina_id: str, horas: float, custo_hora_centavos: int) -> None:
+    with _conectar() as conn:
+        if DATABASE_URL:
+            conn.execute(
+                "INSERT INTO eng_consumo (id, criado_em, empresa_id, obra_id, data, turno, maquina_id, horas, custo_hora_centavos) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT (obra_id, data, turno, maquina_id) DO UPDATE SET horas = EXCLUDED.horas, custo_hora_centavos = EXCLUDED.custo_hora_centavos",
+                (id_, _agora(), empresa_id, obra_id, data, turno, maquina_id, horas, custo_hora_centavos),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO eng_consumo (id, criado_em, empresa_id, obra_id, data, turno, maquina_id, horas, custo_hora_centavos) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT (obra_id, data, turno, maquina_id) DO UPDATE SET horas = excluded.horas, custo_hora_centavos = excluded.custo_hora_centavos",
+                (id_, _agora(), empresa_id, obra_id, data, turno, maquina_id, horas, custo_hora_centavos),
+            )
+
+
+def listar_consumo(obra_id: str, data: str | None = None, turno: str | None = None) -> list[sqlite3.Row]:
+    consulta = "SELECT * FROM eng_consumo WHERE obra_id = ?"
+    parametros: list = [obra_id]
+    if data:
+        consulta += " AND data = ?"; parametros.append(data)
+    if turno:
+        consulta += " AND turno = ?"; parametros.append(turno)
+    with _conectar() as conn:
+        return conn.execute(consulta, tuple(parametros)).fetchall()

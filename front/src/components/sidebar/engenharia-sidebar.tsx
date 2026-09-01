@@ -6,11 +6,11 @@ import {
   LayoutDashboard,
   HardHat,
   Truck,
-  Package,
-  Coins,
-  Plane,
-  Ruler,
   Users,
+  Route,
+  Plane,
+  TrendingUp,
+  Coins,
   Settings,
   LogOut,
 } from "lucide-react";
@@ -25,12 +25,12 @@ import {
 const ITEMS = [
   { href: "/eng", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/eng/obras", icon: HardHat, label: "Obras" },
-  { href: "/eng/equipamentos", icon: Truck, label: "Equipamentos" },
-  { href: "/eng/materiais", icon: Package, label: "Materiais" },
+  { href: "/eng/equipamentos", icon: Truck, label: "Máquinas" },
+  { href: "/eng/trabalhadores", icon: Users, label: "Trabalhadores" },
+  { href: "/eng/frentes", icon: Route, label: "Frentes" },
+  { href: "/eng/voos", icon: Plane, label: "Voos" },
+  { href: "/eng/avanco", icon: TrendingUp, label: "Avanço" },
   { href: "/eng/custos", icon: Coins, label: "Custos" },
-  { href: "/eng/monitoramento", icon: Plane, label: "Monitoramento" },
-  { href: "/eng/medicoes", icon: Ruler, label: "Medições" },
-  { href: "/eng/clientes", icon: Users, label: "Clientes" },
   { href: "/eng/configuracoes", icon: Settings, label: "Configurações" },
 ] as const;
 
@@ -66,7 +66,7 @@ export function EngenhariaSidebar() {
             href={item.href}
             icon={<item.icon size={18} strokeWidth={2} />}
             label={item.label}
-            active={pathname === item.href}
+            active={item.href === "/eng" ? pathname === "/eng" : pathname.startsWith(item.href)}
           />
         ))}
       </SidebarNav>

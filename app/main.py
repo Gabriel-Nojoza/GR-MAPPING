@@ -36,7 +36,7 @@ from pydantic import BaseModel
 load_dotenv()  # lê o .env local (GEMINI_API_KEY) antes de qualquer coisa
 
 from app import db, ramos
-from app.metadata import read_photo_metadata, PhotoMetadata
+from app.metadata import read_photo_metadata, PhotoMetadata, dados_foto_voo
 from app.gsd import compute_gsd
 from app.area import area_do_poligono
 from app.ia_projeto import (
@@ -304,6 +304,38 @@ class ClienteWhatsappDados(BaseModel):
 class RecursoEngDados(BaseModel):
     nome: str
     dados: dict = {}
+
+
+class FrenteDados(BaseModel):
+    obra_id: str
+    nome: str
+    geojson: dict | None = None
+    extensao_prevista_m: float = 0
+
+
+class VooDados(BaseModel):
+    obra_id: str
+    data: str
+    turno: str
+    observacao: str | None = None
+
+
+class DeteccaoDados(BaseModel):
+    maquina_id: str
+    foto_id: str | None = None
+    frente_id: str | None = None
+    lat: float | None = None
+    lon: float | None = None
+    status_maquina: str | None = None
+
+
+class ConsumoDados(BaseModel):
+    obra_id: str
+    data: str
+    turno: str
+    maquina_id: str
+    horas: float = 0
+    custo_hora_centavos: int = 0
 
 
 class ImovelDados(BaseModel):
@@ -1059,7 +1091,7 @@ def atualizar_whatsapp_cobranca(cliente_id: str, dados: ClienteWhatsappDados):
 # ----------------------------------------------------------------------
 # recursos do ramo engenharia (obras, equipamentos, materiais, medições, monitoramento)
 # ----------------------------------------------------------------------
-TIPOS_RECURSO_ENG = {"obra", "equipamento", "material", "medicao", "monitoramento", "custo"}
+TIPOS_RECURSO_ENG = {"obra", "equipamento", "material", "medicao", "monitoramento", "custo", "trabalhador"}
 
 
 def _empresa_do_contexto(contexto: dict | None) -> str | None:
@@ -1147,6 +1179,293 @@ def excluir_recurso_eng(tipo: str, recurso_id: str):
     for arquivo in UPLOADS_DIR.glob(f"recurso-{recurso_id}.*"):
         arquivo.unlink(missing_ok=True)
     return {"ok": True}
+
+
+# ----------------------------------------------------------------------
+# monitoramento de produtividade por voo de drone (ramo engenharia)
+# ----------------------------------------------------------------------
+_R_TERRA = 6_371_000.0  # metros
+
+
+def _dist_m(lat1, lon1, lat2, lon2) -> float:
+    """Distância aproximada entre dois pontos GPS, em metros (haversine)."""
+    if None in (lat1, lon1, lat2, lon2):
+        return 0.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lon2 - lon1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * _R_TERRA * math.asin(min(1.0, math.sqrt(a)))
+
+
+def _linha_da_frente(geojson) -> list[tuple[float, float]]:
+    """Extrai a lista de (lon, lat) de um GeoJSON LineString (ou Feature com LineString)."""
+    if not geojson:
+        return []
+    try:
+        geo = json.loads(geojson) if isinstance(geojson, str) else geojson
+        if geo.get("type") == "Feature":
+            geo = geo.get("geometry", {})
+        if geo.get("type") == "LineString":
+            return [(float(c[0]), float(c[1])) for c in geo.get("coordinates", [])]
+    except (TypeError, ValueError, KeyError):
+        pass
+    return []
+
+
+def _progressiva(coords: list[tuple[float, float]], lat: float | None, lon: float | None) -> float | None:
+    """Posição (em metros do início) do ponto projetado sobre a linha da frente."""
+    if not coords or lat is None or lon is None or len(coords) < 2:
+        return None
+    melhor_dist = float("inf")
+    acumulado = 0.0
+    progressiva = 0.0
+    for (lon1, lat1), (lon2, lat2) in zip(coords, coords[1:]):
+        seg_m = _dist_m(lat1, lon1, lat2, lon2)
+        # projeta o ponto no segmento usando um plano local em metros
+        ax, ay = 0.0, 0.0
+        bx = _dist_m(lat1, lon1, lat1, lon2) * (1 if lon2 >= lon1 else -1)
+        by = _dist_m(lat1, lon1, lat2, lon1) * (1 if lat2 >= lat1 else -1)
+        px = _dist_m(lat1, lon1, lat1, lon) * (1 if lon >= lon1 else -1)
+        py = _dist_m(lat1, lon1, lat, lon1) * (1 if lat >= lat1 else -1)
+        seg2 = bx * bx + by * by
+        t = 0.0 if seg2 == 0 else max(0.0, min(1.0, ((px - ax) * bx + (py - ay) * by) / seg2))
+        cx, cy = ax + t * bx, ay + t * by
+        d = math.hypot(px - cx, py - cy)
+        if d < melhor_dist:
+            melhor_dist = d
+            progressiva = acumulado + t * seg_m
+        acumulado += seg_m
+    return round(progressiva, 1)
+
+
+def _frente_da_obra(obra_id: str, frente_id: str | None):
+    frentes = list(db.listar_frentes(obra_id))
+    if frente_id:
+        return next((f for f in frentes if f["id"] == frente_id), None)
+    return frentes[0] if frentes else None
+
+
+def _voo_resposta(linha) -> dict:
+    d = dict(linha)
+    fotos = db.listar_fotos_voo(d["id"])
+    det = db.listar_deteccoes(d["id"])
+    d["total_fotos"] = len(fotos)
+    d["total_deteccoes"] = len(det)
+    d["fotos_com_gps"] = sum(1 for f in fotos if f["gps_lat"] is not None)
+    return d
+
+
+@app.get("/eng/frentes")
+def listar_frentes(obra_id: str):
+    saida = []
+    for f in db.listar_frentes(obra_id):
+        item = dict(f)
+        try:
+            item["geojson"] = json.loads(item["geojson"]) if item["geojson"] else None
+        except (TypeError, ValueError):
+            item["geojson"] = None
+        saida.append(item)
+    return saida
+
+
+@app.post("/eng/frentes")
+def criar_frente(dados: FrenteDados, contexto: dict | None = Depends(contexto_usuario)):
+    nome = dados.nome.strip()
+    if not nome or not dados.obra_id:
+        raise HTTPException(status_code=400, detail="informe a obra e o nome da frente")
+    identificador = uuid.uuid4().hex
+    geo = json.dumps(dados.geojson, ensure_ascii=False) if dados.geojson else None
+    db.criar_frente(identificador, _empresa_do_contexto(contexto), dados.obra_id, nome, geo, max(0.0, dados.extensao_prevista_m))
+    return dict(db.obter_frente(identificador))
+
+
+@app.patch("/eng/frentes/{frente_id}")
+def atualizar_frente(frente_id: str, dados: FrenteDados):
+    if db.obter_frente(frente_id) is None:
+        raise HTTPException(status_code=404, detail="frente não encontrada")
+    geo = json.dumps(dados.geojson, ensure_ascii=False) if dados.geojson else None
+    db.atualizar_frente(frente_id, dados.nome.strip(), geo, max(0.0, dados.extensao_prevista_m))
+    return {"ok": True}
+
+
+@app.delete("/eng/frentes/{frente_id}")
+def excluir_frente(frente_id: str):
+    if not db.excluir_frente(frente_id):
+        raise HTTPException(status_code=404, detail="frente não encontrada")
+    return {"ok": True}
+
+
+@app.get("/eng/voos")
+def listar_voos(obra_id: str | None = None, contexto: dict | None = Depends(contexto_usuario)):
+    return [_voo_resposta(v) for v in db.listar_voos(_empresa_do_contexto(contexto), obra_id)]
+
+
+@app.post("/eng/voos")
+def criar_voo(dados: VooDados, contexto: dict | None = Depends(contexto_usuario)):
+    if not dados.obra_id or not dados.data:
+        raise HTTPException(status_code=400, detail="informe a obra e a data do voo")
+    if dados.turno not in {"Manhã", "Tarde", "Único"}:
+        raise HTTPException(status_code=400, detail="turno inválido")
+    identificador = uuid.uuid4().hex
+    db.criar_voo(identificador, _empresa_do_contexto(contexto), dados.obra_id, dados.data, dados.turno,
+                 (dados.observacao or "").strip() or None)
+    return _voo_resposta(db.obter_voo(identificador))
+
+
+@app.get("/eng/voos/{voo_id}")
+def obter_voo(voo_id: str):
+    voo = db.obter_voo(voo_id)
+    if voo is None:
+        raise HTTPException(status_code=404, detail="voo não encontrado")
+    resultado = _voo_resposta(voo)
+    resultado["fotos"] = [dict(f) for f in db.listar_fotos_voo(voo_id)]
+    resultado["deteccoes"] = [dict(d) for d in db.listar_deteccoes(voo_id)]
+    return resultado
+
+
+@app.delete("/eng/voos/{voo_id}")
+def excluir_voo(voo_id: str):
+    for f in db.listar_fotos_voo(voo_id):
+        for arq in UPLOADS_DIR.glob(f"voo-{f['id']}.*"):
+            arq.unlink(missing_ok=True)
+    if not db.excluir_voo(voo_id):
+        raise HTTPException(status_code=404, detail="voo não encontrado")
+    return {"ok": True}
+
+
+@app.post("/eng/voos/{voo_id}/fotos")
+def enviar_fotos_voo(voo_id: str, fotos: list[UploadFile] = File(...)):
+    if db.obter_voo(voo_id) is None:
+        raise HTTPException(status_code=404, detail="voo não encontrado")
+    salvas = []
+    for foto in fotos:
+        if foto.content_type not in {"image/jpeg", "image/png", "image/webp"}:
+            continue
+        conteudo = foto.file.read()
+        if not conteudo or len(conteudo) > 25 * 1024 * 1024:
+            continue
+        foto_id = uuid.uuid4().hex
+        extensao = _extensao_por_mime(foto.content_type, ".jpg")
+        caminho = UPLOADS_DIR / f"voo-{foto_id}{extensao}"
+        caminho.write_bytes(conteudo)
+        try:
+            meta = dados_foto_voo(caminho)
+        except Exception:
+            meta = {"gps_lat": None, "gps_lon": None, "altitude_m": None, "tirada_em": None}
+        db.adicionar_foto_voo(foto_id, voo_id, foto.filename or "foto.jpg", foto.content_type,
+                              meta["gps_lat"], meta["gps_lon"], meta["altitude_m"], meta["tirada_em"])
+        salvas.append(foto_id)
+    return {"ok": True, "adicionadas": len(salvas)}
+
+
+@app.get("/eng/voos/{voo_id}/fotos/{foto_id}/imagem")
+def imagem_foto_voo(voo_id: str, foto_id: str):
+    foto = db.obter_foto_voo(foto_id)
+    caminho = next(iter(UPLOADS_DIR.glob(f"voo-{foto_id}.*")), None)
+    if foto is None or caminho is None:
+        raise HTTPException(status_code=404, detail="foto não encontrada")
+    return Response(content=caminho.read_bytes(), media_type=foto["mime"] or "image/jpeg")
+
+
+@app.post("/eng/voos/{voo_id}/deteccoes")
+def criar_deteccao(voo_id: str, dados: DeteccaoDados):
+    voo = db.obter_voo(voo_id)
+    if voo is None:
+        raise HTTPException(status_code=404, detail="voo não encontrado")
+    if not dados.maquina_id:
+        raise HTTPException(status_code=400, detail="informe a máquina")
+    frente = _frente_da_obra(voo["obra_id"], dados.frente_id)
+    progressiva = None
+    if frente is not None:
+        progressiva = _progressiva(_linha_da_frente(frente["geojson"]), dados.lat, dados.lon)
+    identificador = uuid.uuid4().hex
+    db.criar_deteccao(identificador, voo_id, dados.foto_id, dados.maquina_id,
+                      frente["id"] if frente is not None else None,
+                      dados.lat, dados.lon, progressiva, "manual", dados.status_maquina)
+    return dict(db.obter_deteccao(identificador))
+
+
+@app.patch("/eng/deteccoes/{deteccao_id}")
+def atualizar_deteccao(deteccao_id: str, dados: DeteccaoDados):
+    det = db.obter_deteccao(deteccao_id)
+    if det is None:
+        raise HTTPException(status_code=404, detail="detecção não encontrada")
+    voo = db.obter_voo(det["voo_id"])
+    frente = _frente_da_obra(voo["obra_id"], dados.frente_id or det["frente_id"])
+    progressiva = _progressiva(_linha_da_frente(frente["geojson"]), dados.lat, dados.lon) if frente else None
+    db.atualizar_deteccao(deteccao_id, dados.maquina_id, dados.lat, dados.lon, progressiva, dados.status_maquina)
+    return {"ok": True}
+
+
+@app.delete("/eng/deteccoes/{deteccao_id}")
+def excluir_deteccao(deteccao_id: str):
+    if not db.excluir_deteccao(deteccao_id):
+        raise HTTPException(status_code=404, detail="detecção não encontrada")
+    return {"ok": True}
+
+
+@app.get("/eng/consumo")
+def listar_consumo(obra_id: str, data: str | None = None, turno: str | None = None):
+    return [dict(c) for c in db.listar_consumo(obra_id, data, turno)]
+
+
+@app.post("/eng/consumo")
+def salvar_consumo(dados: ConsumoDados, contexto: dict | None = Depends(contexto_usuario)):
+    if not dados.obra_id or not dados.maquina_id or not dados.data:
+        raise HTTPException(status_code=400, detail="informe obra, data e máquina")
+    db.salvar_consumo(uuid.uuid4().hex, _empresa_do_contexto(contexto), dados.obra_id, dados.data,
+                      dados.turno, dados.maquina_id, max(0.0, dados.horas), max(0, dados.custo_hora_centavos))
+    return {"ok": True}
+
+
+@app.get("/eng/obras/{obra_id}/comparar")
+def comparar_voos(obra_id: str, voo_a: str, voo_b: str):
+    """Avanço de cada máquina entre dois voos da mesma obra."""
+    va, vb = db.obter_voo(voo_a), db.obter_voo(voo_b)
+    if va is None or vb is None:
+        raise HTTPException(status_code=404, detail="voo não encontrado")
+
+    det_a = {d["maquina_id"]: dict(d) for d in db.listar_deteccoes(voo_a)}
+    det_b = {d["maquina_id"]: dict(d) for d in db.listar_deteccoes(voo_b)}
+    maquinas = {r["id"]: r["nome"] for r in db.listar_recursos_eng(None, "equipamento")}
+
+    consumo = {c["maquina_id"]: dict(c) for c in db.listar_consumo(obra_id, vb["data"], vb["turno"])}
+
+    linhas = []
+    for mid in sorted(set(det_a) | set(det_b)):
+        a, b = det_a.get(mid), det_b.get(mid)
+        avanco = None
+        if a and b:
+            if a.get("progressiva_m") is not None and b.get("progressiva_m") is not None:
+                avanco = round(b["progressiva_m"] - a["progressiva_m"], 1)
+            elif None not in (a.get("lat"), a.get("lon"), b.get("lat"), b.get("lon")):
+                avanco = round(_dist_m(a["lat"], a["lon"], b["lat"], b["lon"]), 1)
+        parada = avanco is not None and abs(avanco) < 15
+        cst = consumo.get(mid, {})
+        horas = cst.get("horas") or 0
+        custo = horas * (cst.get("custo_hora_centavos") or 0) / 100
+        linhas.append({
+            "maquina_id": mid,
+            "maquina_nome": maquinas.get(mid, "Máquina"),
+            "pos_a": a and {"lat": a["lat"], "lon": a["lon"], "progressiva_m": a.get("progressiva_m")},
+            "pos_b": b and {"lat": b["lat"], "lon": b["lon"], "progressiva_m": b.get("progressiva_m")},
+            "avanco_m": avanco,
+            "parada": parada,
+            "horas": horas,
+            "custo": round(custo, 2),
+            "custo_por_metro": round(custo / avanco, 2) if avanco and avanco > 0 else None,
+        })
+
+    avanco_total = sum(l["avanco_m"] for l in linhas if l["avanco_m"] and l["avanco_m"] > 0)
+    custo_total = sum(l["custo"] for l in linhas)
+    return {
+        "voo_a": dict(va), "voo_b": dict(vb),
+        "maquinas": linhas,
+        "avanco_total_m": round(avanco_total, 1),
+        "custo_total": round(custo_total, 2),
+        "custo_por_metro": round(custo_total / avanco_total, 2) if avanco_total > 0 else None,
+    }
 
 
 @app.get("/admin/empresas")

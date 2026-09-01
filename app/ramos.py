@@ -36,9 +36,8 @@ RAMOS: dict[str, dict] = {
         "label": "Engenharia / Construção civil",
         "rota_inicial": "/eng",
         "sidebar": [
-            "eng_dashboard", "eng_obras", "eng_equipamentos", "eng_materiais",
-            "eng_custos", "eng_monitoramento", "eng_medicoes",
-            "eng_clientes", "eng_configuracoes",
+            "eng_dashboard", "eng_obras", "eng_maquinas", "eng_trabalhadores",
+            "eng_frentes", "eng_voos", "eng_avanco", "eng_custos", "eng_configuracoes",
         ],
         "campos_cliente": [
             {"key": "endereco", "label": "Endereço", "tipo": "texto", "obrigatorio": False},

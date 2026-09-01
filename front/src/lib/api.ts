@@ -271,6 +271,46 @@ export async function enviarFotoRecursoEng(tipo: string, id: string, foto: File)
 export async function excluirRecursoEng(tipo: string, id: string) { return financeiroResposta(await fetch(`${API_URL}/eng/recursos/${tipo}/${id}`, { method: "DELETE" })); }
 export function recursoEngFotoUrl(tipo: string, id: string) { return `${API_URL}/eng/recursos/${tipo}/${id}/foto`; }
 
+// ---- monitoramento de produtividade por voo de drone --------------------
+export type Frente = { id: string; obra_id: string; nome: string; geojson: GeoLineString | null; extensao_prevista_m: number };
+export type GeoLineString = { type: "LineString"; coordinates: [number, number][] };
+export type Voo = {
+  id: string; criado_em: string; obra_id: string; data: string; turno: string; observacao?: string | null;
+  total_fotos: number; total_deteccoes: number; fotos_com_gps: number;
+  fotos?: VooFoto[]; deteccoes?: Deteccao[];
+};
+export type VooFoto = { id: string; nome_arquivo: string; gps_lat: number | null; gps_lon: number | null; altitude_m: number | null; tirada_em: string | null; tem_qr: number };
+export type Deteccao = { id: string; voo_id: string; foto_id: string | null; maquina_id: string; frente_id: string | null; lat: number | null; lon: number | null; progressiva_m: number | null; metodo: string; status_maquina: string | null };
+export type Comparacao = {
+  voo_a: Voo; voo_b: Voo;
+  maquinas: {
+    maquina_id: string; maquina_nome: string;
+    pos_a: { lat: number | null; lon: number | null; progressiva_m: number | null } | null;
+    pos_b: { lat: number | null; lon: number | null; progressiva_m: number | null } | null;
+    avanco_m: number | null; parada: boolean; horas: number; custo: number; custo_por_metro: number | null;
+  }[];
+  avanco_total_m: number; custo_total: number; custo_por_metro: number | null;
+};
+
+export async function getFrentes(obraId: string) { return financeiroResposta(await fetch(`${API_URL}/eng/frentes?obra_id=${obraId}`, { headers: authHeaders(), cache: "no-store" })) as Promise<Frente[]>; }
+export async function criarFrente(d: { obra_id: string; nome: string; geojson?: GeoLineString | null; extensao_prevista_m?: number }) { return financeiroResposta(await fetch(`${API_URL}/eng/frentes`, { method: "POST", headers: authHeaders(), body: JSON.stringify(d) })) as Promise<Frente>; }
+export async function atualizarFrente(id: string, d: { obra_id: string; nome: string; geojson?: GeoLineString | null; extensao_prevista_m?: number }) { return financeiroResposta(await fetch(`${API_URL}/eng/frentes/${id}`, { method: "PATCH", headers: authHeaders(), body: JSON.stringify(d) })); }
+export async function excluirFrente(id: string) { return financeiroResposta(await fetch(`${API_URL}/eng/frentes/${id}`, { method: "DELETE" })); }
+
+export async function getVoos(obraId?: string) { const q = obraId ? `?obra_id=${obraId}` : ""; return financeiroResposta(await fetch(`${API_URL}/eng/voos${q}`, { headers: authHeaders(), cache: "no-store" })) as Promise<Voo[]>; }
+export async function getVoo(id: string) { return financeiroResposta(await fetch(`${API_URL}/eng/voos/${id}`, { headers: authHeaders(), cache: "no-store" })) as Promise<Voo>; }
+export async function criarVoo(d: { obra_id: string; data: string; turno: string; observacao?: string }) { return financeiroResposta(await fetch(`${API_URL}/eng/voos`, { method: "POST", headers: authHeaders(), body: JSON.stringify(d) })) as Promise<Voo>; }
+export async function excluirVoo(id: string) { return financeiroResposta(await fetch(`${API_URL}/eng/voos/${id}`, { method: "DELETE" })); }
+export async function enviarFotosVoo(id: string, fotos: File[]) { const form = new FormData(); fotos.forEach((f) => form.append("fotos", f)); return financeiroResposta(await fetch(`${API_URL}/eng/voos/${id}/fotos`, { method: "POST", body: form })) as Promise<{ ok: boolean; adicionadas: number }>; }
+export function fotoVooUrl(vooId: string, fotoId: string) { return `${API_URL}/eng/voos/${vooId}/fotos/${fotoId}/imagem`; }
+export async function criarDeteccao(vooId: string, d: { maquina_id: string; foto_id?: string; frente_id?: string; lat?: number; lon?: number; status_maquina?: string }) { return financeiroResposta(await fetch(`${API_URL}/eng/voos/${vooId}/deteccoes`, { method: "POST", headers: authHeaders(), body: JSON.stringify(d) })) as Promise<Deteccao>; }
+export async function atualizarDeteccao(id: string, d: { maquina_id: string; frente_id?: string; lat?: number; lon?: number; status_maquina?: string }) { return financeiroResposta(await fetch(`${API_URL}/eng/deteccoes/${id}`, { method: "PATCH", headers: authHeaders(), body: JSON.stringify(d) })); }
+export async function excluirDeteccao(id: string) { return financeiroResposta(await fetch(`${API_URL}/eng/deteccoes/${id}`, { method: "DELETE" })); }
+export async function compararVoos(obraId: string, vooA: string, vooB: string) { return financeiroResposta(await fetch(`${API_URL}/eng/obras/${obraId}/comparar?voo_a=${vooA}&voo_b=${vooB}`, { headers: authHeaders(), cache: "no-store" })) as Promise<Comparacao>; }
+export type Consumo = { maquina_id: string; horas: number; custo_hora_centavos: number; data: string; turno: string };
+export async function getConsumo(obraId: string, data?: string, turno?: string) { const q = new URLSearchParams({ obra_id: obraId }); if (data) q.set("data", data); if (turno) q.set("turno", turno); return financeiroResposta(await fetch(`${API_URL}/eng/consumo?${q}`, { headers: authHeaders(), cache: "no-store" })) as Promise<Consumo[]>; }
+export async function salvarConsumo(d: { obra_id: string; data: string; turno: string; maquina_id: string; horas: number; custo_hora_centavos: number }) { return financeiroResposta(await fetch(`${API_URL}/eng/consumo`, { method: "POST", headers: authHeaders(), body: JSON.stringify(d) })); }
+
 export type Documento = { id: string; criado_em: string; titulo: string; categoria: string; nome_arquivo: string; mime?: string | null; tamanho_bytes: number };
 export async function getDocumentos(busca = "") { const res = await fetch(`${API_URL}/documentos?busca=${encodeURIComponent(busca)}`, { cache: "no-store" }); return financeiroResposta(res) as Promise<Documento[]>; }
 export async function enviarDocumento(arquivo: File, titulo: string, categoria: string) { const dados = new FormData(); dados.append("arquivo", arquivo); dados.append("titulo", titulo); dados.append("categoria", categoria); return financeiroResposta(await fetch(`${API_URL}/documentos`, { method: "POST", body: dados })); }
