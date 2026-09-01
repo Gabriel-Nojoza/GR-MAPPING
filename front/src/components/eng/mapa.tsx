@@ -7,7 +7,8 @@ import type * as L from "leaflet";
 export type PontoMapa = { lat: number; lon: number; cor?: string; titulo?: string };
 export type SegmentoMapa = { a: PontoMapa; b: PontoMapa; cor?: string; tracejado?: boolean };
 
-const CENTRO_PADRAO: [number, number] = [-15.78, -47.93];
+const CENTRO_PADRAO: [number, number] = [-14.2, -51.9]; // centro do Brasil
+const ZOOM_BRASIL = 4;
 
 export function Mapa({
   center,
@@ -18,6 +19,7 @@ export function Mapa({
   pontos = [],
   segmentos = [],
   onClique,
+  busca = false,
   altura = "440px",
 }: {
   center?: [number, number] | null;
@@ -28,9 +30,12 @@ export function Mapa({
   pontos?: PontoMapa[];
   segmentos?: SegmentoMapa[];
   onClique?: (lat: number, lon: number) => void;
+  busca?: boolean;
   altura?: string;
 }) {
   const divRef = useRef<HTMLDivElement>(null);
+  const [termo, setTermo] = useState("");
+  const [buscando, setBuscando] = useState(false);
   const mapRef = useRef<L.Map | null>(null);
   const leafletRef = useRef<typeof L | null>(null);
   const grupoRef = useRef<L.LayerGroup | null>(null);
@@ -80,7 +85,11 @@ export function Mapa({
       const leaflet = (mod.default ?? mod) as unknown as typeof L;
       if (cancelado || mapRef.current || !divRef.current) return;
       leafletRef.current = leaflet;
-      const map = leaflet.map(divRef.current, { center: center ?? CENTRO_PADRAO, zoom });
+      const map = leaflet.map(divRef.current, {
+        center: center ?? CENTRO_PADRAO,
+        zoom: center ? zoom : ZOOM_BRASIL,
+        worldCopyJump: true,
+      });
       leaflet.tileLayer(
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         { maxZoom: 20, attribution: "Esri" },
@@ -116,5 +125,42 @@ export function Mapa({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [center?.[0], center?.[1]]);
 
-  return <div ref={divRef} style={{ height: altura }} className="w-full overflow-hidden rounded-xl border border-slate-200" />;
+  async function geocodificar(e: React.FormEvent) {
+    e.preventDefault();
+    if (!termo.trim() || !mapRef.current) return;
+    try {
+      setBuscando(true);
+      const r = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${encodeURIComponent(termo)}`,
+        { headers: { "Accept-Language": "pt-BR" } },
+      );
+      const dados = await r.json();
+      if (dados[0]) {
+        mapRef.current.setView([Number(dados[0].lat), Number(dados[0].lon)], 17);
+      }
+    } catch {
+      /* silencioso */
+    } finally {
+      setBuscando(false);
+    }
+  }
+
+  return (
+    <div className="relative w-full">
+      {busca && (
+        <form onSubmit={geocodificar} className="absolute left-2 right-2 top-2 z-[500] flex gap-2 sm:left-14 sm:right-auto sm:w-80">
+          <input
+            value={termo}
+            onChange={(e) => setTermo(e.target.value)}
+            placeholder="Buscar endereço / cidade da obra"
+            className="w-full rounded-lg border border-slate-300 bg-white/95 px-3 py-2 text-sm shadow-sm outline-none focus:border-primary"
+          />
+          <button type="submit" disabled={buscando} className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white shadow-sm disabled:opacity-60">
+            {buscando ? "…" : "Ir"}
+          </button>
+        </form>
+      )}
+      <div ref={divRef} style={{ height: altura }} className="w-full overflow-hidden rounded-xl border border-slate-200" />
+    </div>
+  );
 }

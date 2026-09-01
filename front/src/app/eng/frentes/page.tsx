@@ -90,6 +90,7 @@ export default function FrentesPage() {
             <Mapa
               center={centro}
               zoom={centro ? 16 : 4}
+              busca
               linha={coords}
               linhaEditavel
               onLinhaChange={setCoords}

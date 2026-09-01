@@ -108,7 +108,7 @@ export default function VooDetalhe() {
               {frentes.map((f) => <option key={f.id} value={f.id}>{f.nome}</option>)}
             </select>
           )}
-          <Mapa center={centro} zoom={centro ? 17 : 4} linha={linha} pontos={pontos} onClique={marcar} altura="560px" />
+          <Mapa center={centro} zoom={centro ? 17 : 4} busca linha={linha} pontos={pontos} onClique={marcar} altura="560px" />
           <p className="mt-2 text-xs text-slate-500">
             {frente ? `Frente: ${frente.nome}. ` : "Sem frente desenhada — o avanço vai sair pela distância GPS. "}
             Escolha a máquina ao lado e clique no mapa onde ela está.
