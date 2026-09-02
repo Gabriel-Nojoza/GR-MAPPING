@@ -14,22 +14,21 @@ const hoje = () => new Date().toISOString().slice(0, 10);
 export default function VoosPage() {
   const router = useRouter();
   const [obras, setObras] = useState<RecursoEng[]>([]);
-  const [operadores, setOperadores] = useState<RecursoEng[]>([]);
   const [voos, setVoos] = useState<Voo[]>([]);
+  const [euNome, setEuNome] = useState("");
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
-  const [form, setForm] = useState({ obra_id: "", data: hoje(), turno: "Manhã", observacao: "", operador_id: "" });
+  const [form, setForm] = useState({ obra_id: "", data: hoje(), turno: "Manhã", observacao: "" });
 
   async function carregar() {
     try { setVoos(await getVoos()); } catch (e) { setErro(e instanceof Error ? e.message : "Erro ao carregar voos."); }
   }
   useEffect(() => {
-    const ultimoOp = (() => { try { return localStorage.getItem("gr:operador") ?? ""; } catch { return ""; } })();
+    try {
+      const u = JSON.parse(sessionStorage.getItem("medicao-terreno:usuario") ?? "null");
+      setEuNome(u?.nome || u?.email || "");
+    } catch { /* ignore */ }
     getRecursosEng("obra").then((o) => { setObras(o); setForm((f) => ({ ...f, obra_id: o[0]?.id ?? "" })); }).catch(() => {});
-    getRecursosEng("operador").then((o) => {
-      setOperadores(o);
-      setForm((f) => ({ ...f, operador_id: ultimoOp && o.some((x) => x.id === ultimoOp) ? ultimoOp : o[0]?.id ?? "" }));
-    }).catch(() => {});
     void carregar();
   }, []);
 
@@ -39,8 +38,7 @@ export default function VoosPage() {
     if (!form.obra_id) { setErro("Escolha a obra."); return; }
     try {
       setSalvando(true); setErro("");
-      try { if (form.operador_id) localStorage.setItem("gr:operador", form.operador_id); } catch { /* ignore */ }
-      const v = await criarVoo({ ...form, operador_id: form.operador_id || undefined });
+      const v = await criarVoo(form);
       router.push(`/eng/voos/${v.id}`);
     } catch (e) { setErro(e instanceof Error ? e.message : "Não foi possível criar o voo."); setSalvando(false); }
   }
@@ -80,18 +78,12 @@ export default function VoosPage() {
               <option>Manhã</option><option>Tarde</option><option>Único</option>
             </select>
           </div>
-          <div className="flex flex-col gap-1.5 sm:col-span-2">
-            <label className="text-xs font-medium text-slate-600">Operador (quem voou)</label>
-            <select value={form.operador_id} onChange={(e) => setForm({ ...form, operador_id: e.target.value })} className={CONTROLE}>
-              <option value="">— sem operador —</option>
-              {operadores.map((o) => <option key={o.id} value={o.id}>{o.nome}{o.dados.modelo_drone ? ` · ${o.dados.modelo_drone}` : ""}</option>)}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1.5 sm:col-span-2">
+          <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-4">
             <label className="text-xs font-medium text-slate-600">Observação</label>
             <input value={form.observacao} onChange={(e) => setForm({ ...form, observacao: e.target.value })} placeholder="opcional" className={CONTROLE} />
           </div>
         </div>
+        {euNome && <p className="mt-3 text-xs text-slate-500">O voo fica registrado como criado por <b>{euNome}</b> (quem está logado).</p>}
         <div className="mt-5 flex justify-end border-t border-slate-100 pt-4">
           <Button onClick={criar} disabled={salvando}><Plus size={16} />{salvando ? "Criando..." : "Criar voo"}</Button>
         </div>
@@ -104,7 +96,7 @@ export default function VoosPage() {
             <thead>
               <tr className="border-b border-slate-100 text-xs text-slate-400">
                 <th className="px-5 py-3">Data</th><th className="px-5 py-3">Turno</th><th className="px-5 py-3">Obra</th>
-                <th className="px-5 py-3">Operador</th><th className="px-5 py-3">Fotos</th><th className="px-5 py-3">Máquinas marcadas</th><th className="px-5 py-3" /><th className="px-5 py-3" />
+                <th className="px-5 py-3">Enviado por</th><th className="px-5 py-3">Fotos</th><th className="px-5 py-3">Máquinas marcadas</th><th className="px-5 py-3" /><th className="px-5 py-3" />
               </tr>
             </thead>
             <tbody>
@@ -115,7 +107,10 @@ export default function VoosPage() {
                   <td className="px-5 py-4"><Link href={`/eng/voos/${v.id}`} className="font-medium text-primary hover:underline">{new Date(v.data + "T00:00:00").toLocaleDateString("pt-BR")}</Link></td>
                   <td className="px-5 py-4"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">{v.turno}</span></td>
                   <td className="px-5 py-4 text-slate-600">{obraNome.get(v.obra_id) ?? "—"}</td>
-                  <td className="px-5 py-4 text-slate-500">{v.operador_nome ?? "—"}</td>
+                  <td className="px-5 py-4 text-slate-500">
+                    {v.criado_por ?? v.operador_nome ?? "—"}
+                    {v.operador_drone && <span className="block text-xs text-slate-400">{v.operador_drone}</span>}
+                  </td>
                   <td className="px-5 py-4 text-slate-500">{v.total_fotos} <span className="text-xs text-slate-400">({v.fotos_com_gps} c/ GPS)</span></td>
                   <td className="px-5 py-4 text-slate-500">{v.total_deteccoes}</td>
                   <td className="px-5 py-4"><Link href={`/eng/voos/${v.id}`} className="rounded-lg bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-primary hover:bg-indigo-100">Abrir / subir fotos</Link></td>

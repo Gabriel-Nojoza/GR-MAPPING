@@ -195,13 +195,14 @@ export const MODULOS: Record<string, ModuloEng> = {
     nomePlaceholder: "Ex: Ruan Gusmão",
     campos: [
       { key: "modelo_drone", label: "Modelo do drone", tipo: "texto", col: 1, placeholder: "Ex: DJI Mini 3" },
+      { key: "email", label: "E-mail de acesso", tipo: "texto", col: 1, placeholder: "o mesmo do login" },
       { key: "telefone", label: "Telefone", tipo: "texto", col: 1 },
       { key: "registro_anac", label: "Registro ANAC (SISANT)", tipo: "texto", col: 1 },
     ],
     colunas: [
       { label: "Drone", valor: (r) => t(r, "modelo_drone") },
+      { label: "E-mail", valor: (r) => t(r, "email") },
       { label: "Telefone", valor: (r) => t(r, "telefone") },
-      { label: "ANAC", valor: (r) => t(r, "registro_anac") },
     ],
     resumo: [
       { label: "operador(es)", valor: (rs) => String(rs.length) },

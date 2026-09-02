@@ -276,7 +276,8 @@ export type Frente = { id: string; obra_id: string; nome: string; geojson: GeoLi
 export type GeoLineString = { type: "LineString"; coordinates: [number, number][] };
 export type Voo = {
   id: string; criado_em: string; obra_id: string; data: string; turno: string; observacao?: string | null;
-  operador_id?: string | null; operador_nome?: string | null;
+  operador_id?: string | null; operador_nome?: string | null; operador_drone?: string | null;
+  criado_por?: string | null;
   total_fotos: number; total_deteccoes: number; fotos_com_gps: number;
   fotos?: VooFoto[]; deteccoes?: Deteccao[];
 };

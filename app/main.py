@@ -1248,14 +1248,41 @@ def _frente_da_obra(obra_id: str, frente_id: str | None):
     return frentes[0] if frentes else None
 
 
-_OPERADORES_CACHE: dict = {}
-
-
-def _nome_operador(operador_id) -> str | None:
-    if not operador_id:
+def _nome_do_contexto(contexto: dict | None) -> str | None:
+    """Nome de quem está logado (pra registrar quem criou o voo / subiu as fotos)."""
+    if not contexto or not contexto.get("email"):
         return None
+    email = contexto["email"]
+    usuario = db.obter_usuario_por_email(email)
+    return (usuario["nome"] if usuario and usuario["nome"] else email)
+
+
+def _operador_do_email(contexto: dict | None):
+    """Acha o operador cadastrado cujo e-mail bate com o do usuário logado."""
+    if not contexto or not contexto.get("email"):
+        return None
+    alvo = contexto["email"].strip().lower()
+    for r in db.listar_recursos_eng(_empresa_do_contexto(contexto), "operador"):
+        try:
+            dados = json.loads(r["dados_json"]) if r["dados_json"] else {}
+        except (TypeError, ValueError):
+            dados = {}
+        if (dados.get("email") or "").strip().lower() == alvo:
+            return r
+    return None
+
+
+def _operador_info(operador_id):
+    if not operador_id:
+        return None, None
     r = db.obter_recurso_eng(operador_id)
-    return r["nome"] if r else None
+    if not r:
+        return None, None
+    try:
+        dados = json.loads(r["dados_json"]) if r["dados_json"] else {}
+    except (TypeError, ValueError):
+        dados = {}
+    return r["nome"], dados.get("modelo_drone")
 
 
 def _voo_resposta(linha) -> dict:
@@ -1265,7 +1292,9 @@ def _voo_resposta(linha) -> dict:
     d["total_fotos"] = len(fotos)
     d["total_deteccoes"] = len(det)
     d["fotos_com_gps"] = sum(1 for f in fotos if f["gps_lat"] is not None)
-    d["operador_nome"] = _nome_operador(d.get("operador_id"))
+    nome, drone = _operador_info(d.get("operador_id"))
+    d["operador_nome"] = nome
+    d["operador_drone"] = drone
     return d
 
 
@@ -1320,9 +1349,13 @@ def criar_voo(dados: VooDados, contexto: dict | None = Depends(contexto_usuario)
         raise HTTPException(status_code=400, detail="informe a obra e a data do voo")
     if dados.turno not in {"Manhã", "Tarde", "Único"}:
         raise HTTPException(status_code=400, detail="turno inválido")
+    operador_id = dados.operador_id or None
+    if not operador_id:
+        achado = _operador_do_email(contexto)
+        operador_id = achado["id"] if achado else None
     identificador = uuid.uuid4().hex
     db.criar_voo(identificador, _empresa_do_contexto(contexto), dados.obra_id, dados.data, dados.turno,
-                 (dados.observacao or "").strip() or None, dados.operador_id or None)
+                 (dados.observacao or "").strip() or None, operador_id, _nome_do_contexto(contexto))
     return _voo_resposta(db.obter_voo(identificador))
 
 
@@ -1509,9 +1542,9 @@ def eng_dashboard(contexto: dict | None = Depends(contexto_usuario)):
     for (obra_id, data), lista in grupos.items():
         lista.sort(key=lambda v: _ORDEM_TURNO.get(v["turno"], 1))
         turnos = [v["turno"] for v in lista]
-        ops = sorted({op_nome.get(v.get("operador_id")) for v in lista if v.get("operador_id")})
+        quem = {op_nome.get(v.get("operador_id")) or v.get("criado_por") for v in lista}
         calendario[data] = calendario.get(data, [])
-        calendario[data].append({"obra": obra_nome.get(obra_id, "Obra"), "turnos": turnos, "operadores": [o for o in ops if o]})
+        calendario[data].append({"obra": obra_nome.get(obra_id, "Obra"), "turnos": turnos, "operadores": sorted(q for q in quem if q)})
         if len(lista) >= 2:
             r = _avanco_entre_voos(lista[0]["id"], lista[-1]["id"])
             dias.append({"obra": obra_nome.get(obra_id, "Obra"), "data": data, **r})

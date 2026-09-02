@@ -95,7 +95,9 @@ export default function VooDetalhe() {
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Voo {new Date(voo.data + "T00:00:00").toLocaleDateString("pt-BR")} · {voo.turno}</h1>
           <p className="mt-1 text-sm text-slate-500">
-            {voo.operador_nome ? `Operador: ${voo.operador_nome} · ` : ""}{voo.total_fotos} foto(s) · {voo.total_deteccoes} máquina(s) marcada(s)
+            {voo.criado_por ? `Enviado por ${voo.criado_por}` : ""}
+            {voo.operador_drone ? ` · ${voo.operador_drone}` : ""}
+            {voo.criado_por ? " · " : ""}{voo.total_fotos} foto(s) · {voo.total_deteccoes} máquina(s) marcada(s)
           </p>
         </div>
       </div>

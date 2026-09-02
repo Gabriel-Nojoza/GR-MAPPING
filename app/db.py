@@ -255,7 +255,8 @@ def init_db() -> None:
                 data TEXT NOT NULL,
                 turno TEXT NOT NULL,
                 observacao TEXT,
-                operador_id TEXT
+                operador_id TEXT,
+                criado_por TEXT
             )
         """)
         conn.execute("""
@@ -351,6 +352,8 @@ def init_db() -> None:
             colunas_voos = {r["name"] for r in conn.execute("PRAGMA table_info(eng_voos)")}
         if colunas_voos and "operador_id" not in colunas_voos:
             conn.execute("ALTER TABLE eng_voos ADD COLUMN operador_id TEXT")
+        if colunas_voos and "criado_por" not in colunas_voos:
+            conn.execute("ALTER TABLE eng_voos ADD COLUMN criado_por TEXT")
 
         if DATABASE_URL:
             colunas_usuarios = {r["column_name"] for r in conn.execute(
@@ -1091,12 +1094,13 @@ def excluir_frente(id_: str) -> bool:
 
 
 def criar_voo(id_: str, empresa_id: str | None, obra_id: str, data: str,
-              turno: str, observacao: str | None, operador_id: str | None = None) -> None:
+              turno: str, observacao: str | None, operador_id: str | None = None,
+              criado_por: str | None = None) -> None:
     with _conectar() as conn:
         conn.execute(
-            "INSERT INTO eng_voos (id, criado_em, empresa_id, obra_id, data, turno, observacao, operador_id) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (id_, _agora(), empresa_id, obra_id, data, turno, observacao, operador_id),
+            "INSERT INTO eng_voos (id, criado_em, empresa_id, obra_id, data, turno, observacao, operador_id, criado_por) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (id_, _agora(), empresa_id, obra_id, data, turno, observacao, operador_id, criado_por),
         )
 
 
