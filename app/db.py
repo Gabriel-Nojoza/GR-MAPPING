@@ -780,7 +780,7 @@ def listar_usuarios() -> list[sqlite3.Row]:
     with _conectar() as conn:
         return conn.execute(
             "SELECT u.id, u.criado_em, u.nome, u.email, u.ativo, u.perfil, u.empresa_id, "
-            "e.nome AS empresa_nome FROM usuarios u "
+            "e.nome AS empresa_nome, e.ramo AS empresa_ramo FROM usuarios u "
             "LEFT JOIN empresas e ON e.id = u.empresa_id "
             "ORDER BY u.criado_em DESC"
         ).fetchall()

@@ -116,6 +116,7 @@ class UsuarioEmpresaDados(BaseModel):
     email: str
     senha: str
     empresa_id: str
+    modelo_drone: str | None = None
 
 
 class UsuarioEmpresaUpdate(BaseModel):
@@ -123,6 +124,7 @@ class UsuarioEmpresaUpdate(BaseModel):
     email: str
     empresa_id: str
     senha: str | None = None
+    modelo_drone: str | None = None
 
 
 class BuscaLeadsDados(BaseModel):
@@ -1698,24 +1700,47 @@ def admin_criar_usuario(dados: UsuarioEmpresaDados, _: dict = Depends(exigir_sup
         raise HTTPException(status_code=400, detail="Informe nome e e-mail válidos.")
     if len(dados.senha) < 8:
         raise HTTPException(status_code=400, detail="A senha precisa ter pelo menos 8 caracteres.")
-    if db.obter_empresa(dados.empresa_id) is None:
-        raise HTTPException(status_code=400, detail="Imobiliária não encontrada.")
+    empresa = db.obter_empresa(dados.empresa_id)
+    if empresa is None:
+        raise HTTPException(status_code=400, detail="Empresa não encontrada.")
     db.criar_ou_atualizar_usuario(
         uuid.uuid4().hex, email, nome, _gerar_hash(dados.senha), "imobiliaria", dados.empresa_id
     )
+    # empresa de engenharia com modelo de drone -> cria/atualiza o Operador
+    if ramos.normalizar_ramo(empresa["ramo"]) == "engenharia" and (dados.modelo_drone or "").strip():
+        _upsert_operador(dados.empresa_id, email, nome, dados.modelo_drone.strip())
     return next(dict(usuario) for usuario in db.listar_usuarios() if usuario["email"] == email)
+
+
+def _upsert_operador(empresa_id: str, email: str, nome: str, modelo_drone: str) -> None:
+    """Cria ou atualiza o cadastro de operador de drone ligado a um acesso."""
+    alvo = email.strip().lower()
+    for r in db.listar_recursos_eng(empresa_id, "operador"):
+        try:
+            d = json.loads(r["dados_json"]) if r["dados_json"] else {}
+        except (TypeError, ValueError):
+            d = {}
+        if (d.get("email") or "").strip().lower() == alvo:
+            d.update({"email": alvo, "modelo_drone": modelo_drone})
+            with db._conectar() as conn:
+                conn.execute("UPDATE recursos_eng SET nome = ?, dados_json = ? WHERE id = ?",
+                             (nome, json.dumps(d, ensure_ascii=False), r["id"]))
+            return
+    db.criar_recurso_eng(uuid.uuid4().hex, empresa_id, "operador", nome,
+                         json.dumps({"email": alvo, "modelo_drone": modelo_drone}, ensure_ascii=False))
 
 
 @app.patch("/admin/usuarios/{usuario_id}")
 def admin_atualizar_usuario(usuario_id: str, dados: UsuarioEmpresaUpdate, _: dict = Depends(exigir_superadmin)):
     usuario = db.obter_usuario(usuario_id)
     if usuario is None or usuario["perfil"] != "imobiliaria":
-        raise HTTPException(status_code=404, detail="Usuário de imobiliária não encontrado.")
+        raise HTTPException(status_code=404, detail="Acesso de empresa não encontrado.")
     nome, email = dados.nome.strip(), dados.email.strip().lower()
     if not nome or "@" not in email:
         raise HTTPException(status_code=400, detail="Informe nome e e-mail válidos.")
-    if db.obter_empresa(dados.empresa_id) is None:
-        raise HTTPException(status_code=400, detail="Imobiliária não encontrada.")
+    empresa = db.obter_empresa(dados.empresa_id)
+    if empresa is None:
+        raise HTTPException(status_code=400, detail="Empresa não encontrada.")
     if dados.senha is not None and dados.senha and len(dados.senha) < 8:
         raise HTTPException(status_code=400, detail="A nova senha precisa ter pelo menos 8 caracteres.")
     hash_senha = _gerar_hash(dados.senha) if dados.senha else None
@@ -1727,6 +1752,8 @@ def admin_atualizar_usuario(usuario_id: str, dados: UsuarioEmpresaUpdate, _: dic
         raise
     if not atualizado:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    if ramos.normalizar_ramo(empresa["ramo"]) == "engenharia" and (dados.modelo_drone or "").strip():
+        _upsert_operador(dados.empresa_id, email, nome, dados.modelo_drone.strip())
     return next(dict(item) for item in db.listar_usuarios() if item["id"] == usuario_id)
 
 
@@ -1734,7 +1761,7 @@ def admin_atualizar_usuario(usuario_id: str, dados: UsuarioEmpresaUpdate, _: dic
 def admin_excluir_usuario(usuario_id: str, _: dict = Depends(exigir_superadmin)):
     usuario = db.obter_usuario(usuario_id)
     if usuario is None or usuario["perfil"] != "imobiliaria":
-        raise HTTPException(status_code=404, detail="Usuário de imobiliária não encontrado.")
+        raise HTTPException(status_code=404, detail="Acesso de empresa não encontrado.")
     if not db.desativar_usuario(usuario_id):
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
     return {"ok": True}

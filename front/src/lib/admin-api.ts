@@ -22,6 +22,7 @@ export type UsuarioAdmin = {
   perfil: "superadmin" | "imobiliaria";
   empresa_id?: string | null;
   empresa_nome?: string | null;
+  empresa_ramo?: RamoEmpresa | null;
 };
 
 function cabecalhos() {
@@ -70,7 +71,7 @@ export async function listarUsuarios(): Promise<UsuarioAdmin[]> {
   }));
 }
 
-export async function criarUsuarioEmpresa(dados: { nome: string; email: string; senha: string; empresa_id: string }): Promise<UsuarioAdmin> {
+export async function criarUsuarioEmpresa(dados: { nome: string; email: string; senha: string; empresa_id: string; modelo_drone?: string }): Promise<UsuarioAdmin> {
   return respostaAdmin(await fetch(`${API_URL}/admin/usuarios`, {
     method: "POST",
     headers: cabecalhos(),
@@ -78,7 +79,7 @@ export async function criarUsuarioEmpresa(dados: { nome: string; email: string; 
   }));
 }
 
-export async function atualizarUsuarioEmpresa(id: string, dados: { nome: string; email: string; empresa_id: string; senha?: string }): Promise<UsuarioAdmin> {
+export async function atualizarUsuarioEmpresa(id: string, dados: { nome: string; email: string; empresa_id: string; senha?: string; modelo_drone?: string }): Promise<UsuarioAdmin> {
   return respostaAdmin(await fetch(`${API_URL}/admin/usuarios/${id}`, {
     method: "PATCH",
     headers: cabecalhos(),
