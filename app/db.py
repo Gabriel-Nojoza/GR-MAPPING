@@ -303,6 +303,23 @@ def init_db() -> None:
             )
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS contratos (
+                id TEXT PRIMARY KEY,
+                criado_em TEXT NOT NULL,
+                numero TEXT,
+                contratante_nome TEXT NOT NULL,
+                contratante_doc TEXT,
+                contratante_endereco TEXT,
+                servico TEXT NOT NULL,
+                valor_centavos INTEGER NOT NULL DEFAULT 0,
+                forma_pagamento TEXT,
+                data_inicio TEXT,
+                prazo_meses INTEGER,
+                observacoes TEXT,
+                status TEXT NOT NULL DEFAULT 'rascunho'
+            )
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS modelos_mensagem_leads (
                 id TEXT PRIMARY KEY,
                 criado_em TEXT NOT NULL,
@@ -647,6 +664,54 @@ def criar_modelo_mensagem_lead(id_: str, titulo: str, conteudo: str) -> None:
 def excluir_modelo_mensagem_lead(id_: str) -> bool:
     with _conectar() as conn:
         cur = conn.execute("DELETE FROM modelos_mensagem_leads WHERE id = ?", (id_,))
+        return cur.rowcount > 0
+
+
+# ----------------------------------------------------------------------
+# contratos (gerados pela GR Mapping ao fechar negócio)
+# ----------------------------------------------------------------------
+def listar_contratos() -> list[sqlite3.Row]:
+    with _conectar() as conn:
+        return conn.execute("SELECT * FROM contratos ORDER BY criado_em DESC").fetchall()
+
+
+def obter_contrato(id_: str) -> sqlite3.Row | None:
+    with _conectar() as conn:
+        return conn.execute("SELECT * FROM contratos WHERE id = ?", (id_,)).fetchone()
+
+
+def criar_contrato(id_: str, numero: str | None, contratante_nome: str, contratante_doc: str | None,
+                   contratante_endereco: str | None, servico: str, valor_centavos: int,
+                   forma_pagamento: str | None, data_inicio: str | None, prazo_meses: int | None,
+                   observacoes: str | None, status: str) -> None:
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO contratos (id, criado_em, numero, contratante_nome, contratante_doc, "
+            "contratante_endereco, servico, valor_centavos, forma_pagamento, data_inicio, "
+            "prazo_meses, observacoes, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (id_, _agora(), numero, contratante_nome, contratante_doc, contratante_endereco,
+             servico, valor_centavos, forma_pagamento, data_inicio, prazo_meses, observacoes, status),
+        )
+
+
+def atualizar_contrato(id_: str, numero: str | None, contratante_nome: str, contratante_doc: str | None,
+                       contratante_endereco: str | None, servico: str, valor_centavos: int,
+                       forma_pagamento: str | None, data_inicio: str | None, prazo_meses: int | None,
+                       observacoes: str | None, status: str) -> bool:
+    with _conectar() as conn:
+        cur = conn.execute(
+            "UPDATE contratos SET numero = ?, contratante_nome = ?, contratante_doc = ?, "
+            "contratante_endereco = ?, servico = ?, valor_centavos = ?, forma_pagamento = ?, "
+            "data_inicio = ?, prazo_meses = ?, observacoes = ?, status = ? WHERE id = ?",
+            (numero, contratante_nome, contratante_doc, contratante_endereco, servico, valor_centavos,
+             forma_pagamento, data_inicio, prazo_meses, observacoes, status, id_),
+        )
+        return cur.rowcount > 0
+
+
+def excluir_contrato(id_: str) -> bool:
+    with _conectar() as conn:
+        cur = conn.execute("DELETE FROM contratos WHERE id = ?", (id_,))
         return cur.rowcount > 0
 
 

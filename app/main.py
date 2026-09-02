@@ -138,6 +138,20 @@ class ModeloMensagemLeadDados(BaseModel):
     conteudo: str
 
 
+class ContratoDados(BaseModel):
+    numero: str | None = None
+    contratante_nome: str
+    contratante_doc: str | None = None
+    contratante_endereco: str | None = None
+    servico: str
+    valor_centavos: int = 0
+    forma_pagamento: str | None = None
+    data_inicio: str | None = None
+    prazo_meses: int | None = None
+    observacoes: str | None = None
+    status: str = "rascunho"
+
+
 @app.post("/auth/login")
 def login(dados: LoginDados):
     """Confere as credenciais informadas na tela de login."""
@@ -1616,6 +1630,55 @@ def comparar_voos(obra_id: str, voo_a: str, voo_b: str):
         "custo_total": round(custo_total, 2),
         "custo_por_metro": round(custo_total / avanco_total, 2) if avanco_total > 0 else None,
     }
+
+
+def _contrato_resposta(linha) -> dict:
+    d = dict(linha)
+    d["valor"] = d.pop("valor_centavos", 0) / 100
+    return d
+
+
+@app.get("/admin/contratos")
+def admin_listar_contratos(_: dict = Depends(exigir_superadmin)):
+    return [_contrato_resposta(c) for c in db.listar_contratos()]
+
+
+@app.post("/admin/contratos")
+def admin_criar_contrato(dados: ContratoDados, _: dict = Depends(exigir_superadmin)):
+    nome = dados.contratante_nome.strip()
+    servico = dados.servico.strip()
+    if not nome or not servico:
+        raise HTTPException(status_code=400, detail="Informe o nome do contratante e o serviço.")
+    identificador = uuid.uuid4().hex
+    db.criar_contrato(
+        identificador, (dados.numero or "").strip() or None, nome,
+        (dados.contratante_doc or "").strip() or None, (dados.contratante_endereco or "").strip() or None,
+        servico, max(0, dados.valor_centavos), (dados.forma_pagamento or "").strip() or None,
+        (dados.data_inicio or "").strip() or None, dados.prazo_meses,
+        (dados.observacoes or "").strip() or None, dados.status or "rascunho",
+    )
+    return _contrato_resposta(db.obter_contrato(identificador))
+
+
+@app.patch("/admin/contratos/{contrato_id}")
+def admin_atualizar_contrato(contrato_id: str, dados: ContratoDados, _: dict = Depends(exigir_superadmin)):
+    if db.obter_contrato(contrato_id) is None:
+        raise HTTPException(status_code=404, detail="Contrato não encontrado.")
+    db.atualizar_contrato(
+        contrato_id, (dados.numero or "").strip() or None, dados.contratante_nome.strip(),
+        (dados.contratante_doc or "").strip() or None, (dados.contratante_endereco or "").strip() or None,
+        dados.servico.strip(), max(0, dados.valor_centavos), (dados.forma_pagamento or "").strip() or None,
+        (dados.data_inicio or "").strip() or None, dados.prazo_meses,
+        (dados.observacoes or "").strip() or None, dados.status or "rascunho",
+    )
+    return _contrato_resposta(db.obter_contrato(contrato_id))
+
+
+@app.delete("/admin/contratos/{contrato_id}")
+def admin_excluir_contrato(contrato_id: str, _: dict = Depends(exigir_superadmin)):
+    if not db.excluir_contrato(contrato_id):
+        raise HTTPException(status_code=404, detail="Contrato não encontrado.")
+    return {"ok": True}
 
 
 @app.get("/admin/empresas")

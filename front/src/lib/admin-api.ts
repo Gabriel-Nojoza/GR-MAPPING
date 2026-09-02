@@ -99,6 +99,27 @@ export async function pesquisarLeads(dados: { cidade: string; segmento: string; 
   return respostaAdmin(await fetch(`${API_URL}/admin/leads/pesquisar`, { method: "POST", headers: cabecalhos(), body: JSON.stringify(dados) }));
 }
 
+export type Contrato = {
+  id: string; criado_em: string; numero?: string | null;
+  contratante_nome: string; contratante_doc?: string | null; contratante_endereco?: string | null;
+  servico: string; valor: number; forma_pagamento?: string | null;
+  data_inicio?: string | null; prazo_meses?: number | null; observacoes?: string | null;
+  status: "rascunho" | "assinado" | "encerrado";
+};
+type ContratoInput = Omit<Contrato, "id" | "criado_em" | "valor"> & { valor_centavos: number };
+export async function listarContratos(): Promise<Contrato[]> {
+  return respostaAdmin(await fetch(`${API_URL}/admin/contratos`, { headers: cabecalhos(), cache: "no-store" }));
+}
+export async function criarContrato(d: ContratoInput): Promise<Contrato> {
+  return respostaAdmin(await fetch(`${API_URL}/admin/contratos`, { method: "POST", headers: cabecalhos(), body: JSON.stringify(d) }));
+}
+export async function atualizarContrato(id: string, d: ContratoInput): Promise<Contrato> {
+  return respostaAdmin(await fetch(`${API_URL}/admin/contratos/${id}`, { method: "PATCH", headers: cabecalhos(), body: JSON.stringify(d) }));
+}
+export async function excluirContrato(id: string): Promise<void> {
+  await respostaAdmin(await fetch(`${API_URL}/admin/contratos/${id}`, { method: "DELETE", headers: cabecalhos() }));
+}
+
 export type ModeloMensagemLead = { id: string; criado_em: string; titulo: string; conteudo: string; };
 export async function listarModelosMensagemLead(): Promise<ModeloMensagemLead[]> { return respostaAdmin(await fetch(`${API_URL}/admin/leads/modelos`, { headers: cabecalhos(), cache: "no-store" })); }
 export async function criarModeloMensagemLead(dados: { titulo: string; conteudo: string }): Promise<ModeloMensagemLead> { return respostaAdmin(await fetch(`${API_URL}/admin/leads/modelos`, { method: "POST", headers: cabecalhos(), body: JSON.stringify(dados) })); }
