@@ -254,7 +254,8 @@ def init_db() -> None:
                 obra_id TEXT NOT NULL,
                 data TEXT NOT NULL,
                 turno TEXT NOT NULL,
-                observacao TEXT
+                observacao TEXT,
+                operador_id TEXT
             )
         """)
         conn.execute("""
@@ -340,6 +341,16 @@ def init_db() -> None:
             colunas_empresas = {r["name"] for r in conn.execute("PRAGMA table_info(empresas)")}
         if "ramo" not in colunas_empresas:
             conn.execute("ALTER TABLE empresas ADD COLUMN ramo TEXT NOT NULL DEFAULT 'imobiliaria'")
+
+        # migração leve: operador do voo (quem pilotou o drone)
+        if DATABASE_URL:
+            colunas_voos = {r["column_name"] for r in conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = %s", ("eng_voos",)
+            )}
+        else:
+            colunas_voos = {r["name"] for r in conn.execute("PRAGMA table_info(eng_voos)")}
+        if colunas_voos and "operador_id" not in colunas_voos:
+            conn.execute("ALTER TABLE eng_voos ADD COLUMN operador_id TEXT")
 
         if DATABASE_URL:
             colunas_usuarios = {r["column_name"] for r in conn.execute(
@@ -1080,12 +1091,12 @@ def excluir_frente(id_: str) -> bool:
 
 
 def criar_voo(id_: str, empresa_id: str | None, obra_id: str, data: str,
-              turno: str, observacao: str | None) -> None:
+              turno: str, observacao: str | None, operador_id: str | None = None) -> None:
     with _conectar() as conn:
         conn.execute(
-            "INSERT INTO eng_voos (id, criado_em, empresa_id, obra_id, data, turno, observacao) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (id_, _agora(), empresa_id, obra_id, data, turno, observacao),
+            "INSERT INTO eng_voos (id, criado_em, empresa_id, obra_id, data, turno, observacao, operador_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (id_, _agora(), empresa_id, obra_id, data, turno, observacao, operador_id),
         )
 
 

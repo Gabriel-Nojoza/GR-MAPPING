@@ -187,6 +187,27 @@ export const MODULOS: Record<string, ModuloEng> = {
     ],
   },
 
+  operador: {
+    tipo: "operador",
+    titulo: "Operadores",
+    descricao: "Quem pilota os drones. Cada voo é vinculado a um operador.",
+    nomeLabel: "Nome do operador",
+    nomePlaceholder: "Ex: Ruan Gusmão",
+    campos: [
+      { key: "modelo_drone", label: "Modelo do drone", tipo: "texto", col: 1, placeholder: "Ex: DJI Mini 3" },
+      { key: "telefone", label: "Telefone", tipo: "texto", col: 1 },
+      { key: "registro_anac", label: "Registro ANAC (SISANT)", tipo: "texto", col: 1 },
+    ],
+    colunas: [
+      { label: "Drone", valor: (r) => t(r, "modelo_drone") },
+      { label: "Telefone", valor: (r) => t(r, "telefone") },
+      { label: "ANAC", valor: (r) => t(r, "registro_anac") },
+    ],
+    resumo: [
+      { label: "operador(es)", valor: (rs) => String(rs.length) },
+    ],
+  },
+
   trabalhador: {
     tipo: "trabalhador",
     titulo: "Trabalhadores",

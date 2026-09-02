@@ -319,6 +319,7 @@ class VooDados(BaseModel):
     data: str
     turno: str
     observacao: str | None = None
+    operador_id: str | None = None
 
 
 class DeteccaoDados(BaseModel):
@@ -1092,7 +1093,7 @@ def atualizar_whatsapp_cobranca(cliente_id: str, dados: ClienteWhatsappDados):
 # ----------------------------------------------------------------------
 # recursos do ramo engenharia (obras, equipamentos, materiais, medições, monitoramento)
 # ----------------------------------------------------------------------
-TIPOS_RECURSO_ENG = {"obra", "equipamento", "material", "medicao", "monitoramento", "custo", "trabalhador"}
+TIPOS_RECURSO_ENG = {"obra", "equipamento", "material", "medicao", "monitoramento", "custo", "trabalhador", "operador"}
 
 
 def _empresa_do_contexto(contexto: dict | None) -> str | None:
@@ -1247,6 +1248,16 @@ def _frente_da_obra(obra_id: str, frente_id: str | None):
     return frentes[0] if frentes else None
 
 
+_OPERADORES_CACHE: dict = {}
+
+
+def _nome_operador(operador_id) -> str | None:
+    if not operador_id:
+        return None
+    r = db.obter_recurso_eng(operador_id)
+    return r["nome"] if r else None
+
+
 def _voo_resposta(linha) -> dict:
     d = dict(linha)
     fotos = db.listar_fotos_voo(d["id"])
@@ -1254,6 +1265,7 @@ def _voo_resposta(linha) -> dict:
     d["total_fotos"] = len(fotos)
     d["total_deteccoes"] = len(det)
     d["fotos_com_gps"] = sum(1 for f in fotos if f["gps_lat"] is not None)
+    d["operador_nome"] = _nome_operador(d.get("operador_id"))
     return d
 
 
@@ -1310,7 +1322,7 @@ def criar_voo(dados: VooDados, contexto: dict | None = Depends(contexto_usuario)
         raise HTTPException(status_code=400, detail="turno inválido")
     identificador = uuid.uuid4().hex
     db.criar_voo(identificador, _empresa_do_contexto(contexto), dados.obra_id, dados.data, dados.turno,
-                 (dados.observacao or "").strip() or None)
+                 (dados.observacao or "").strip() or None, dados.operador_id or None)
     return _voo_resposta(db.obter_voo(identificador))
 
 
@@ -1454,6 +1466,72 @@ def salvar_consumo(dados: ConsumoDados, contexto: dict | None = Depends(contexto
     db.salvar_consumo(uuid.uuid4().hex, _empresa_do_contexto(contexto), dados.obra_id, dados.data,
                       dados.turno, dados.maquina_id, max(0.0, dados.horas), max(0, dados.custo_hora_centavos))
     return {"ok": True}
+
+
+_ORDEM_TURNO = {"Manhã": 0, "Único": 1, "Tarde": 2}
+
+
+def _avanco_entre_voos(voo_a_id: str, voo_b_id: str) -> dict:
+    """Avanço (m) e nº de máquinas paradas entre dois voos, pela distância GPS."""
+    det_a = {d["maquina_id"]: dict(d) for d in db.listar_deteccoes(voo_a_id)}
+    det_b = {d["maquina_id"]: dict(d) for d in db.listar_deteccoes(voo_b_id)}
+    total, paradas, ativas = 0.0, 0, 0
+    for mid in set(det_a) & set(det_b):
+        a, b = det_a[mid], det_b[mid]
+        if None in (a.get("lat"), a.get("lon"), b.get("lat"), b.get("lon")):
+            continue
+        av = _dist_m(a["lat"], a["lon"], b["lat"], b["lon"])
+        ativas += 1
+        if av < 15:
+            paradas += 1
+        else:
+            total += av
+    return {"avanco_m": round(total, 1), "paradas": paradas, "maquinas": ativas}
+
+
+@app.get("/eng/dashboard")
+def eng_dashboard(contexto: dict | None = Depends(contexto_usuario)):
+    empresa_id = _empresa_do_contexto(contexto)
+    obras = [_recurso_eng_resposta(o) for o in db.listar_recursos_eng(empresa_id, "obra")]
+    maquinas = list(db.listar_recursos_eng(empresa_id, "equipamento"))
+    trabalhadores = list(db.listar_recursos_eng(empresa_id, "trabalhador"))
+    operadores = list(db.listar_recursos_eng(empresa_id, "operador"))
+    voos = list(db.listar_voos(empresa_id, None))
+    obra_nome = {o["id"]: o["nome"] for o in obras}
+    op_nome = {o["id"]: o["nome"] for o in operadores}
+
+    # agrupa voos por (obra, data)
+    grupos: dict[tuple, list] = {}
+    for v in voos:
+        grupos.setdefault((v["obra_id"], v["data"]), []).append(dict(v))
+
+    dias, por_obra, calendario = [], {}, {}
+    for (obra_id, data), lista in grupos.items():
+        lista.sort(key=lambda v: _ORDEM_TURNO.get(v["turno"], 1))
+        turnos = [v["turno"] for v in lista]
+        ops = sorted({op_nome.get(v.get("operador_id")) for v in lista if v.get("operador_id")})
+        calendario[data] = calendario.get(data, [])
+        calendario[data].append({"obra": obra_nome.get(obra_id, "Obra"), "turnos": turnos, "operadores": [o for o in ops if o]})
+        if len(lista) >= 2:
+            r = _avanco_entre_voos(lista[0]["id"], lista[-1]["id"])
+            dias.append({"obra": obra_nome.get(obra_id, "Obra"), "data": data, **r})
+            por_obra[obra_id] = por_obra.get(obra_id, 0) + r["avanco_m"]
+
+    dias.sort(key=lambda d: d["data"])
+    mes_atual = date.today().strftime("%Y-%m")
+    return {
+        "obras_total": len(obras),
+        "obras_em_andamento": sum(1 for o in obras if o["dados"].get("status") == "Em andamento"),
+        "maquinas_total": len(maquinas),
+        "trabalhadores_total": len(trabalhadores),
+        "operadores_total": len(operadores),
+        "voos_total": len(voos),
+        "voos_mes": sum(1 for v in voos if v["data"].startswith(mes_atual)),
+        "avanco_total_m": round(sum(d["avanco_m"] for d in dias), 1),
+        "dias": dias,
+        "por_obra": [{"obra": obra_nome.get(oid, "Obra"), "metros": round(m, 1)} for oid, m in por_obra.items()],
+        "calendario": calendario,
+    }
 
 
 @app.get("/eng/obras/{obra_id}/comparar")

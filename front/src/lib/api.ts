@@ -276,6 +276,7 @@ export type Frente = { id: string; obra_id: string; nome: string; geojson: GeoLi
 export type GeoLineString = { type: "LineString"; coordinates: [number, number][] };
 export type Voo = {
   id: string; criado_em: string; obra_id: string; data: string; turno: string; observacao?: string | null;
+  operador_id?: string | null; operador_nome?: string | null;
   total_fotos: number; total_deteccoes: number; fotos_com_gps: number;
   fotos?: VooFoto[]; deteccoes?: Deteccao[];
 };
@@ -299,7 +300,17 @@ export async function excluirFrente(id: string) { return financeiroResposta(awai
 
 export async function getVoos(obraId?: string) { const q = obraId ? `?obra_id=${obraId}` : ""; return financeiroResposta(await fetch(`${API_URL}/eng/voos${q}`, { headers: authHeaders(), cache: "no-store" })) as Promise<Voo[]>; }
 export async function getVoo(id: string) { return financeiroResposta(await fetch(`${API_URL}/eng/voos/${id}`, { headers: authHeaders(), cache: "no-store" })) as Promise<Voo>; }
-export async function criarVoo(d: { obra_id: string; data: string; turno: string; observacao?: string }) { return financeiroResposta(await fetch(`${API_URL}/eng/voos`, { method: "POST", headers: authHeaders(), body: JSON.stringify(d) })) as Promise<Voo>; }
+export async function criarVoo(d: { obra_id: string; data: string; turno: string; observacao?: string; operador_id?: string }) { return financeiroResposta(await fetch(`${API_URL}/eng/voos`, { method: "POST", headers: authHeaders(), body: JSON.stringify(d) })) as Promise<Voo>; }
+
+export type EngDashboard = {
+  obras_total: number; obras_em_andamento: number; maquinas_total: number;
+  trabalhadores_total: number; operadores_total: number; voos_total: number; voos_mes: number;
+  avanco_total_m: number;
+  dias: { obra: string; data: string; avanco_m: number; paradas: number; maquinas: number }[];
+  por_obra: { obra: string; metros: number }[];
+  calendario: Record<string, { obra: string; turnos: string[]; operadores: string[] }[]>;
+};
+export async function getEngDashboard() { return financeiroResposta(await fetch(`${API_URL}/eng/dashboard`, { headers: authHeaders(), cache: "no-store" })) as Promise<EngDashboard>; }
 export async function excluirVoo(id: string) { return financeiroResposta(await fetch(`${API_URL}/eng/voos/${id}`, { method: "DELETE" })); }
 export async function enviarFotosVoo(id: string, fotos: File[]) { const form = new FormData(); fotos.forEach((f) => form.append("fotos", f)); const token = sessionStorage.getItem("medicao-terreno:token"); return financeiroResposta(await fetch(`${API_URL}/eng/voos/${id}/fotos`, { method: "POST", headers: { Authorization: `Bearer ${token ?? ""}` }, body: form })) as Promise<{ ok: boolean; adicionadas: number; qrs_lidos: number; leitor_ativo: boolean }>; }
 export function fotoVooUrl(vooId: string, fotoId: string) { return `${API_URL}/eng/voos/${vooId}/fotos/${fotoId}/imagem`; }

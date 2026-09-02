@@ -37,7 +37,7 @@ RAMOS: dict[str, dict] = {
         "rota_inicial": "/eng",
         "sidebar": [
             "eng_dashboard", "eng_obras", "eng_maquinas", "eng_trabalhadores",
-            "eng_voos", "eng_avanco", "eng_custos", "eng_configuracoes",
+            "eng_operadores", "eng_voos", "eng_avanco", "eng_custos", "eng_configuracoes",
         ],
         "campos_cliente": [
             {"key": "endereco", "label": "Endereço", "tipo": "texto", "obrigatorio": False},
