@@ -8,16 +8,14 @@ import { Card } from "@/components/ui/card";
 import { Mapa } from "@/components/eng/mapa";
 import {
   atualizarDeteccao, criarDeteccao, enviarFotosVoo, excluirDeteccao, fotoVooUrl,
-  getFrentes, getRecursosEng, getVoo,
-  type Deteccao, type Frente, type RecursoEng, type Voo,
+  getRecursosEng, getVoo,
+  type Deteccao, type RecursoEng, type Voo,
 } from "@/lib/api";
 
 export default function VooDetalhe() {
   const { id } = useParams<{ id: string }>();
   const [voo, setVoo] = useState<Voo | null>(null);
   const [maquinas, setMaquinas] = useState<RecursoEng[]>([]);
-  const [frentes, setFrentes] = useState<Frente[]>([]);
-  const [frenteId, setFrenteId] = useState("");
   const [maquinaSel, setMaquinaSel] = useState("");
   const [subindo, setSubindo] = useState(false);
   const [aviso, setAviso] = useState("");
@@ -28,9 +26,8 @@ export default function VooDetalhe() {
     try {
       const v = await getVoo(id);
       setVoo(v);
-      const [m, f] = await Promise.all([getRecursosEng("equipamento"), getFrentes(v.obra_id)]);
-      setMaquinas(m); setFrentes(f);
-      setFrenteId((atual) => atual || f[0]?.id || "");
+      const m = await getRecursosEng("equipamento");
+      setMaquinas(m);
       setMaquinaSel((atual) => atual || m[0]?.id || "");
     } catch (e) { setErro(e instanceof Error ? e.message : "Erro ao carregar o voo."); }
   }, [id]);
@@ -40,15 +37,12 @@ export default function VooDetalhe() {
   const qrDets = (voo?.deteccoes ?? []).filter((d) => d.metodo === "qr");
   const manuaisDets = (voo?.deteccoes ?? []).filter((d) => d.metodo !== "qr");
   const semGps = !!voo && voo.total_fotos > 0 && voo.fotos_com_gps === 0;
-  const frente = frentes.find((f) => f.id === frenteId);
-  const linha = frente?.geojson?.coordinates ?? null;
 
   const centro = useMemo((): [number, number] | null => {
     const comGps = voo?.fotos?.find((f) => f.gps_lat != null);
     if (comGps) return [comGps.gps_lat!, comGps.gps_lon!];
-    if (linha?.length) return [linha[0][1], linha[0][0]];
     return null;
-  }, [voo, linha]);
+  }, [voo]);
 
   const pontos = (voo?.deteccoes ?? []).flatMap((d) =>
     d.lat != null && d.lon != null
@@ -78,8 +72,8 @@ export default function VooDetalhe() {
     if (!maquinaSel) { setErro("Escolha a máquina antes de clicar no mapa."); return; }
     try {
       const semPos = (voo?.deteccoes ?? []).find((d) => d.maquina_id === maquinaSel && d.lat == null);
-      if (semPos) await atualizarDeteccao(semPos.id, { maquina_id: maquinaSel, frente_id: frenteId || undefined, lat, lon });
-      else await criarDeteccao(id, { maquina_id: maquinaSel, frente_id: frenteId || undefined, lat, lon });
+      if (semPos) await atualizarDeteccao(semPos.id, { maquina_id: maquinaSel, lat, lon });
+      else await criarDeteccao(id, { maquina_id: maquinaSel, lat, lon });
       await carregar();
     } catch (e) { setErro(e instanceof Error ? e.message : "Não foi possível marcar."); }
   }
@@ -106,15 +100,9 @@ export default function VooDetalhe() {
 
       <div className="mt-6 grid gap-5 lg:grid-cols-[1fr_380px]">
         <Card className="p-3">
-          {frentes.length > 1 && (
-            <select value={frenteId} onChange={(e) => setFrenteId(e.target.value)} className="mb-2 w-full max-w-xs rounded-lg border border-slate-300 px-3 py-2 text-sm">
-              {frentes.map((f) => <option key={f.id} value={f.id}>{f.nome}</option>)}
-            </select>
-          )}
-          <Mapa center={centro} zoom={centro ? 17 : 4} busca linha={linha} pontos={pontos} onClique={marcar} altura="560px" />
+          <Mapa center={centro} zoom={centro ? 17 : 4} busca pontos={pontos} onClique={marcar} altura="560px" />
           <p className="mt-2 text-xs text-slate-500">
-            {frente ? `Frente: ${frente.nome}. ` : "Sem frente desenhada — o avanço vai sair pela distância GPS. "}
-            Escolha a máquina ao lado e clique no mapa onde ela está.
+            Fotos com GPS posicionam a máquina sozinhas. Pra ajustar ou marcar as que faltam: escolha a máquina ao lado e clique no mapa.
           </p>
         </Card>
 

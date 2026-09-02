@@ -1,65 +1,55 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Coins, Gauge, Ruler, TrendingUp } from "lucide-react";
+import { Gauge, Ruler, TrendingUp } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Mapa, type SegmentoMapa } from "@/components/eng/mapa";
-import {
-  compararVoos, getFrentes, getRecursosEng, getVoos, salvarConsumo,
-  type Comparacao, type Frente, type RecursoEng, type Voo,
-} from "@/lib/api";
+import { compararVoos, getRecursosEng, getVoos, type Comparacao, type RecursoEng, type Voo } from "@/lib/api";
 
-const brl = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
+const ORDEM_TURNO: Record<string, number> = { "Manhã": 0, "Único": 1, "Tarde": 2 };
+const dataBr = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("pt-BR");
+
+type Dia = { chave: string; obraId: string; obraNome: string; data: string; voos: Voo[] };
 
 export default function AvancoPage() {
   const [obras, setObras] = useState<RecursoEng[]>([]);
-  const [obraId, setObraId] = useState("");
   const [voos, setVoos] = useState<Voo[]>([]);
-  const [vooA, setVooA] = useState("");
-  const [vooB, setVooB] = useState("");
-  const [frentes, setFrentes] = useState<Frente[]>([]);
   const [comp, setComp] = useState<Comparacao | null>(null);
-  const [consumo, setConsumo] = useState<Record<string, { horas: string; custo: string }>>({});
+  const [selecionado, setSelecionado] = useState("");
   const [erro, setErro] = useState("");
 
-  useEffect(() => { getRecursosEng("obra").then(setObras).catch(() => {}); }, []);
+  useEffect(() => {
+    Promise.all([getRecursosEng("obra"), getVoos()])
+      .then(([o, v]) => { setObras(o); setVoos(v); })
+      .catch(() => {});
+  }, []);
 
-  async function trocarObra(id: string) {
-    setObraId(id); setComp(null); setVooA(""); setVooB("");
-    if (!id) { setVoos([]); setFrentes([]); return; }
-    const [vs, fs] = await Promise.all([getVoos(id), getFrentes(id)]);
-    setVoos(vs); setFrentes(fs);
-  }
+  const dias = useMemo<Dia[]>(() => {
+    const nome = new Map(obras.map((o) => [o.id, o.nome]));
+    const grupos = new Map<string, Dia>();
+    for (const v of voos) {
+      const chave = `${v.obra_id}|${v.data}`;
+      if (!grupos.has(chave)) grupos.set(chave, { chave, obraId: v.obra_id, obraNome: nome.get(v.obra_id) ?? "Obra", data: v.data, voos: [] });
+      grupos.get(chave)!.voos.push(v);
+    }
+    return [...grupos.values()]
+      .filter((d) => d.voos.length >= 2)
+      .map((d) => ({ ...d, voos: [...d.voos].sort((a, b) => (ORDEM_TURNO[a.turno] ?? 1) - (ORDEM_TURNO[b.turno] ?? 1)) }))
+      .sort((a, b) => b.data.localeCompare(a.data));
+  }, [obras, voos]);
 
-  async function comparar() {
-    if (!vooA || !vooB || vooA === vooB) { setErro("Escolha dois voos diferentes."); return; }
+  async function abrirDia(dia: Dia) {
+    setSelecionado(dia.chave); setErro(""); setComp(null);
+    const primeiro = dia.voos[0], ultimo = dia.voos[dia.voos.length - 1];
     try {
-      setErro("");
-      const c = await compararVoos(obraId, vooA, vooB);
-      setComp(c);
-      setConsumo(Object.fromEntries(c.maquinas.map((m) => [m.maquina_id, { horas: String(m.horas || ""), custo: "" }])));
+      setComp(await compararVoos(dia.obraId, primeiro.id, ultimo.id));
     } catch (e) { setErro(e instanceof Error ? e.message : "Erro ao comparar."); }
   }
 
-  async function salvarConsumoMaq(maquinaId: string) {
-    const c = consumo[maquinaId];
-    if (!c || !comp) return;
-    const vb = comp.voo_b;
-    await salvarConsumo({
-      obra_id: obraId, data: vb.data, turno: vb.turno, maquina_id: maquinaId,
-      horas: Number(c.horas) || 0, custo_hora_centavos: Math.round((Number(c.custo) || 0) * 100),
-    });
-    await comparar();
-  }
-
-  const linha = frentes[0]?.geojson?.coordinates ?? null;
   const centro = useMemo((): [number, number] | null => {
     const p = comp?.maquinas.find((m) => m.pos_a?.lat != null);
-    if (p?.pos_a?.lat != null) return [p.pos_a.lat, p.pos_a.lon!];
-    if (linha?.length) return [linha[0][1], linha[0][0]];
-    return null;
-  }, [comp, linha]);
+    return p?.pos_a?.lat != null ? [p.pos_a.lat, p.pos_a.lon!] : null;
+  }, [comp]);
 
   const segmentos: SegmentoMapa[] = (comp?.maquinas ?? []).flatMap((m) =>
     m.pos_a?.lat != null && m.pos_b?.lat != null
@@ -68,98 +58,89 @@ export default function AvancoPage() {
   );
   const pontos = (comp?.maquinas ?? []).flatMap((m) => {
     const out = [];
-    if (m.pos_a?.lat != null) out.push({ lat: m.pos_a.lat, lon: m.pos_a.lon!, cor: "#3b82f6", titulo: `${m.maquina_nome} (voo A)` });
-    if (m.pos_b?.lat != null) out.push({ lat: m.pos_b.lat, lon: m.pos_b.lon!, cor: "#16a34a", titulo: `${m.maquina_nome} (voo B)` });
+    if (m.pos_a?.lat != null) out.push({ lat: m.pos_a.lat, lon: m.pos_a.lon!, cor: "#3b82f6", titulo: `${m.maquina_nome} · manhã` });
+    if (m.pos_b?.lat != null) out.push({ lat: m.pos_b.lat, lon: m.pos_b.lon!, cor: "#16a34a", titulo: `${m.maquina_nome} · tarde` });
     return out;
   });
-
-  const opcoesVoo = (v: Voo) => `${new Date(v.data + "T00:00:00").toLocaleDateString("pt-BR")} · ${v.turno} (${v.total_deteccoes} máq.)`;
 
   return (
     <div className="mx-auto max-w-[100rem]">
       <h1 className="text-2xl font-semibold text-slate-900">Avanço</h1>
-      <p className="mt-1 text-sm text-slate-500">Compare dois voos e veja quanto cada máquina produziu — e quem ficou parada.</p>
+      <p className="mt-1 text-sm text-slate-500">Compara os voos da manhã e da tarde do mesmo dia e mostra quanto cada máquina produziu.</p>
 
-      <Card className="mt-6 p-5">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-slate-600">Obra</label>
-            <select value={obraId} onChange={(e) => void trocarObra(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm">
-              <option value="">Selecione</option>
-              {obras.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-slate-600">Voo A (antes)</label>
-            <select value={vooA} onChange={(e) => setVooA(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm" disabled={!obraId}>
-              <option value="">—</option>
-              {voos.map((v) => <option key={v.id} value={v.id}>{opcoesVoo(v)}</option>)}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-slate-600">Voo B (depois)</label>
-            <select value={vooB} onChange={(e) => setVooB(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm" disabled={!obraId}>
-              <option value="">—</option>
-              {voos.map((v) => <option key={v.id} value={v.id}>{opcoesVoo(v)}</option>)}
-            </select>
-          </div>
-          <div className="flex items-end">
-            <Button onClick={comparar} disabled={!vooA || !vooB}>Comparar</Button>
-          </div>
-        </div>
-        {erro && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</p>}
-      </Card>
+      <div className="mt-6 grid gap-5 lg:grid-cols-[320px_1fr]">
+        <Card className="p-0">
+          <div className="border-b border-slate-100 p-4"><h2 className="font-semibold text-slate-800">Dias com 2 voos</h2></div>
+          {dias.length === 0 ? (
+            <p className="p-4 text-sm text-slate-400">Nenhum dia com voo de manhã e de tarde ainda. Registre os dois em <b>Voos</b>.</p>
+          ) : (
+            <div className="divide-y divide-slate-50">
+              {dias.map((d) => (
+                <button
+                  key={d.chave}
+                  onClick={() => abrirDia(d)}
+                  className={`flex w-full items-center justify-between p-4 text-left text-sm hover:bg-slate-50 ${selecionado === d.chave ? "bg-indigo-50/60" : ""}`}
+                >
+                  <div>
+                    <p className="font-medium text-slate-700">{d.obraNome}</p>
+                    <p className="text-xs text-slate-400">{dataBr(d.data)} · {d.voos.map((v) => v.turno).join(" + ")}</p>
+                  </div>
+                  <TrendingUp size={15} className="text-slate-300" />
+                </button>
+              ))}
+            </div>
+          )}
+        </Card>
 
-      {comp && (
-        <>
-          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Card className="p-5"><Ruler size={18} className="text-primary" /><p className="mt-3 text-sm text-slate-500">Avanço total</p><p className="mt-1 text-2xl font-semibold text-slate-900">{comp.avanco_total_m} m</p></Card>
-            <Card className="p-5"><Coins size={18} className="text-slate-400" /><p className="mt-3 text-sm text-slate-500">Custo do período</p><p className="mt-1 text-2xl font-semibold text-slate-900">{brl(comp.custo_total)}</p></Card>
-            <Card className="p-5"><TrendingUp size={18} className="text-emerald-600" /><p className="mt-3 text-sm text-slate-500">R$ por metro</p><p className="mt-1 text-2xl font-semibold text-emerald-600">{comp.custo_por_metro != null ? brl(comp.custo_por_metro) : "—"}</p></Card>
-            <Card className="p-5"><Gauge size={18} className="text-amber-600" /><p className="mt-3 text-sm text-slate-500">Máquinas paradas</p><p className="mt-1 text-2xl font-semibold text-slate-900">{comp.maquinas.filter((m) => m.parada).length} / {comp.maquinas.length}</p></Card>
-          </div>
-
-          <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_1fr]">
-            <Card className="p-3">
-              <Mapa center={centro} zoom={centro ? 17 : 4} linha={linha} pontos={pontos} segmentos={segmentos} altura="480px" />
-              <p className="mt-2 text-xs text-slate-500">Azul = posição no voo A · verde = voo B · linha = trajeto (vermelha se a máquina quase não andou).</p>
-            </Card>
-
-            <Card className="overflow-hidden p-0">
-              <div className="border-b border-slate-100 p-4"><h2 className="font-semibold text-slate-800">Por máquina</h2></div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100 text-xs text-slate-400">
-                      <th className="px-4 py-2.5">Máquina</th><th className="px-4 py-2.5">Avanço</th>
-                      <th className="px-4 py-2.5">Horas</th><th className="px-4 py-2.5">R$/h</th><th className="px-4 py-2.5">R$/m</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {comp.maquinas.map((m) => (
-                      <tr key={m.maquina_id} className="border-b border-slate-50 last:border-0">
-                        <td className="px-4 py-3">
-                          <p className="font-medium text-slate-700">{m.maquina_nome}</p>
-                          {m.parada && <span className="text-xs text-red-600">parada</span>}
-                        </td>
-                        <td className="px-4 py-3 font-medium text-slate-700">{m.avanco_m != null ? `${m.avanco_m} m` : "—"}</td>
-                        <td className="px-4 py-3">
-                          <input value={consumo[m.maquina_id]?.horas ?? ""} onChange={(e) => setConsumo((c) => ({ ...c, [m.maquina_id]: { ...c[m.maquina_id], horas: e.target.value } }))} onBlur={() => salvarConsumoMaq(m.maquina_id)} type="number" min="0" step="0.5" className="w-16 rounded border border-slate-200 px-2 py-1 text-sm" />
-                        </td>
-                        <td className="px-4 py-3">
-                          <input value={consumo[m.maquina_id]?.custo ?? ""} onChange={(e) => setConsumo((c) => ({ ...c, [m.maquina_id]: { ...c[m.maquina_id], custo: e.target.value } }))} onBlur={() => salvarConsumoMaq(m.maquina_id)} type="number" min="0" step="1" placeholder="R$" className="w-20 rounded border border-slate-200 px-2 py-1 text-sm" />
-                        </td>
-                        <td className="px-4 py-3 font-medium text-primary">{m.custo_por_metro != null ? brl(m.custo_por_metro) : "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+        <div>
+          {erro && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</p>}
+          {!comp && !erro && <Card className="grid h-64 place-items-center text-sm text-slate-400">Escolha um dia à esquerda.</Card>}
+          {comp && (
+            <div className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Card className="p-5"><Ruler size={18} className="text-primary" /><p className="mt-3 text-sm text-slate-500">Avanço total do dia</p><p className="mt-1 text-2xl font-semibold text-slate-900">{comp.avanco_total_m} m</p></Card>
+                <Card className="p-5"><Gauge size={18} className="text-amber-600" /><p className="mt-3 text-sm text-slate-500">Máquinas paradas</p><p className="mt-1 text-2xl font-semibold text-slate-900">{comp.maquinas.filter((m) => m.parada).length} / {comp.maquinas.length}</p></Card>
+                <Card className="p-5"><TrendingUp size={18} className="text-emerald-600" /><p className="mt-3 text-sm text-slate-500">Máquinas em campo</p><p className="mt-1 text-2xl font-semibold text-slate-900">{comp.maquinas.length}</p></Card>
               </div>
-              <p className="border-t border-slate-100 p-3 text-xs text-slate-400">Preencha horas e R$/h de cada máquina no turno pra ver o custo por metro.</p>
-            </Card>
-          </div>
-        </>
-      )}
+
+              <div className="grid gap-5 lg:grid-cols-2">
+                <Card className="p-3">
+                  <Mapa center={centro} zoom={centro ? 17 : 4} pontos={pontos} segmentos={segmentos} altura="440px" />
+                  <p className="mt-2 text-xs text-slate-500">Azul = manhã · verde = tarde · linha = trajeto (vermelha se quase não andou).</p>
+                </Card>
+
+                <Card className="overflow-hidden p-0">
+                  <div className="border-b border-slate-100 p-4"><h2 className="font-semibold text-slate-800">Por máquina</h2></div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-xs text-slate-400">
+                          <th className="px-4 py-2.5">Máquina</th><th className="px-4 py-2.5">Avanço</th><th className="px-4 py-2.5">Situação</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {comp.maquinas.map((m) => (
+                          <tr key={m.maquina_id} className="border-b border-slate-50 last:border-0">
+                            <td className="px-4 py-3 font-medium text-slate-700">{m.maquina_nome}</td>
+                            <td className="px-4 py-3 text-slate-700">{m.avanco_m != null ? `${m.avanco_m} m` : "—"}</td>
+                            <td className="px-4 py-3">
+                              {m.avanco_m == null
+                                ? <span className="text-slate-400">só apareceu num voo</span>
+                                : m.parada
+                                  ? <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs text-red-700">parada</span>
+                                  : <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700">trabalhando</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
