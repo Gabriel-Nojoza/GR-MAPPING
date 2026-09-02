@@ -7,15 +7,45 @@ const brl = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", c
 const dataBr = (s?: string | null) => (s ? new Date(s + "T00:00:00").toLocaleDateString("pt-BR") : "____/____/______");
 
 function extenso(v: number): string {
-  // aproximação simples: usa o Intl pra "por extenso" não existe; devolve o número formatado
   return brl(v);
 }
 
-export function gerarContratoPdf(c: Contrato, contratada: Contratada) {
+async function carregarLogo(): Promise<{ dataUrl: string; w: number; h: number } | null> {
+  try {
+    const resp = await fetch("/logo.png");
+    if (!resp.ok) return null;
+    const blob = await resp.blob();
+    const dataUrl = await new Promise<string>((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(String(r.result));
+      r.onerror = rej;
+      r.readAsDataURL(blob);
+    });
+    const dim = await new Promise<{ w: number; h: number }>((res) => {
+      const img = new Image();
+      img.onload = () => res({ w: img.naturalWidth, h: img.naturalHeight });
+      img.onerror = () => res({ w: 1, h: 1 });
+      img.src = dataUrl;
+    });
+    return { dataUrl, ...dim };
+  } catch {
+    return null;
+  }
+}
+
+export async function gerarContratoPdf(c: Contrato, contratada: Contratada) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const M = 20;
   const W = 210 - M * 2;
   let y = M;
+
+  const logo = await carregarLogo();
+  if (logo) {
+    const larguraMm = 34;
+    const alturaMm = (logo.h / logo.w) * larguraMm;
+    doc.addImage(logo.dataUrl, "PNG", 105 - larguraMm / 2, y, larguraMm, alturaMm);
+    y += alturaMm + 5;
+  }
 
   const linha = (txt: string, opts: { size?: number; bold?: boolean; gap?: number; align?: "left" | "center" | "justify" } = {}) => {
     doc.setFont("helvetica", opts.bold ? "bold" : "normal");

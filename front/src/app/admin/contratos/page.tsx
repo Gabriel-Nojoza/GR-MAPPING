@@ -90,9 +90,17 @@ export default function ContratosAdmin() {
     }
   }
 
-  function baixarPdf(c: Contrato) {
-    if (!contratada.doc || !contratada.cidade) setAbrirCfg(true);
-    gerarContratoPdf(c, contratada);
+  async function baixarPdf(c: Contrato) {
+    if (!contratada.doc || !contratada.cidade) {
+      setAbrirCfg(true);
+      setErro("Preencha os dados da GR Mapping antes de gerar o PDF.");
+      return;
+    }
+    try {
+      await gerarContratoPdf(c, contratada);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não foi possível gerar o PDF.");
+    }
   }
 
   return (
@@ -165,7 +173,7 @@ export default function ContratosAdmin() {
                   <td className="px-5 py-4"><span className={`rounded-full px-2.5 py-1 text-xs ${c.status === "assinado" ? "bg-emerald-50 text-emerald-700" : c.status === "encerrado" ? "bg-slate-100 text-slate-500" : "bg-amber-50 text-amber-700"}`}>{c.status}</span></td>
                   <td className="px-5 py-4">
                     <div className="flex justify-end gap-1">
-                      <button onClick={() => baixarPdf(c)} className="flex items-center gap-1 rounded-lg bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-primary hover:bg-indigo-100" title="Baixar PDF"><FileText size={14} /> PDF</button>
+                      <button onClick={() => void baixarPdf(c)} className="flex items-center gap-1 rounded-lg bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-primary hover:bg-indigo-100" title="Baixar PDF"><FileText size={14} /> PDF</button>
                       <button onClick={() => editar(c)} className="rounded-lg p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-primary"><Pencil size={15} /></button>
                       <button onClick={() => apagar(c)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 size={15} /></button>
                     </div>
