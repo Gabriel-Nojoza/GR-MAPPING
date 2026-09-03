@@ -1356,7 +1356,22 @@ def excluir_frente(frente_id: str):
 
 @app.get("/eng/voos")
 def listar_voos(obra_id: str | None = None, contexto: dict | None = Depends(contexto_usuario)):
-    return [_voo_resposta(v) for v in db.listar_voos(_empresa_do_contexto(contexto), obra_id)]
+    empresa_id = _empresa_do_contexto(contexto)
+    voos = [dict(v) for v in db.listar_voos(empresa_id, obra_id)]
+    resumo = db.resumo_voos([v["id"] for v in voos])
+    ops: dict = {}
+    for r in db.listar_recursos_eng(empresa_id, "operador"):
+        try:
+            dados = json.loads(r["dados_json"]) if r["dados_json"] else {}
+        except (TypeError, ValueError):
+            dados = {}
+        ops[r["id"]] = (r["nome"], dados.get("modelo_drone"))
+    for v in voos:
+        v.update(resumo.get(v["id"], {"total_fotos": 0, "fotos_com_gps": 0, "total_deteccoes": 0}))
+        nome, drone = ops.get(v.get("operador_id"), (None, None))
+        v["operador_nome"] = nome
+        v["operador_drone"] = drone
+    return voos
 
 
 @app.post("/eng/voos")

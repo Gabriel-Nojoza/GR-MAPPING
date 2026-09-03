@@ -94,6 +94,11 @@ export function Mapa({
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         { maxZoom: 20, attribution: "Esri" },
       ).addTo(map);
+      // sobreposição transparente com nomes de bairros/cidades e ruas
+      leaflet.tileLayer(
+        "https://{s}.basemaps.cartocdn.com/rastertiles/light_only_labels/{z}/{x}/{y}{r}.png",
+        { maxZoom: 20, subdomains: "abcd", attribution: "&copy; OpenStreetMap, &copy; CARTO", pane: "overlayPane" },
+      ).addTo(map);
       grupoRef.current = leaflet.layerGroup().addTo(map);
       map.on("click", (e: L.LeafletMouseEvent) => {
         const { lat, lng } = e.latlng;

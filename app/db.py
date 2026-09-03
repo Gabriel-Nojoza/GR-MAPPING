@@ -1190,6 +1190,27 @@ def obter_voo(id_: str) -> sqlite3.Row | None:
         return conn.execute("SELECT * FROM eng_voos WHERE id = ?", (id_,)).fetchone()
 
 
+def resumo_voos(voo_ids: list[str]) -> dict:
+    """Contagens (fotos, fotos com GPS, detecções) de vários voos em 2 consultas."""
+    if not voo_ids:
+        return {}
+    marcadores = ",".join("?" for _ in voo_ids)
+    saida = {vid: {"total_fotos": 0, "fotos_com_gps": 0, "total_deteccoes": 0} for vid in voo_ids}
+    with _conectar() as conn:
+        for r in conn.execute(
+            f"SELECT voo_id, COUNT(*) AS n, COUNT(gps_lat) AS ngps FROM eng_voo_fotos "
+            f"WHERE voo_id IN ({marcadores}) GROUP BY voo_id", tuple(voo_ids),
+        ):
+            saida[r["voo_id"]]["total_fotos"] = r["n"]
+            saida[r["voo_id"]]["fotos_com_gps"] = r["ngps"]
+        for r in conn.execute(
+            f"SELECT voo_id, COUNT(*) AS n FROM eng_deteccoes "
+            f"WHERE voo_id IN ({marcadores}) GROUP BY voo_id", tuple(voo_ids),
+        ):
+            saida[r["voo_id"]]["total_deteccoes"] = r["n"]
+    return saida
+
+
 def excluir_voo(id_: str) -> bool:
     with _conectar() as conn:
         conn.execute("DELETE FROM eng_deteccoes WHERE voo_id = ?", (id_,))
