@@ -60,13 +60,13 @@ export default function LoginPage() {
 
   return (
     <div
-      className="relative min-h-screen bg-[#0a1424] bg-cover bg-center"
+      className="relative min-h-screen overflow-y-auto bg-[#0a1424] bg-fixed bg-cover bg-center"
       style={{ backgroundImage: "url(/capa.png)" }}
     >
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-l from-[#0a1424] via-[#0a1424]/75 to-transparent" />
+      <div className="pointer-events-none fixed inset-0 bg-gradient-to-l from-[#0a1424] via-[#0a1424]/75 to-transparent" />
 
-      <div className="relative flex min-h-screen items-center justify-center px-6 sm:justify-end sm:px-12 lg:px-28">
-        <div className="w-[380px] max-w-full">
+      <div className="relative flex min-h-screen items-center justify-center px-6 py-16 sm:justify-end sm:px-12 lg:px-28">
+        <div className="w-[24rem] max-w-full">
           <h1 className="text-3xl font-bold tracking-tight text-white">Entrar no sistema</h1>
           <p className="mt-2 text-sm text-white/55">Use o usuário cadastrado.</p>
 
