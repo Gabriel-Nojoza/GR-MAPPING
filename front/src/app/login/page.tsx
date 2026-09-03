@@ -59,12 +59,15 @@ export default function LoginPage() {
     "w-full border-0 border-b border-white/25 bg-transparent pb-2 pt-1 text-white outline-none transition placeholder:text-white/35 focus:border-blue-400";
 
   return (
-    <div
-      className="relative min-h-screen overflow-y-auto bg-[#0a1424] bg-fixed bg-cover bg-center"
-      style={{ backgroundImage: "url(/capa.png)" }}
-    >
+    <div className="relative min-h-screen bg-[#0a1424]">
+      {/* fundo fixo: cobre a viewport em qualquer zoom */}
+      <div
+        className="fixed inset-0 bg-[#0a1424] bg-cover bg-center"
+        style={{ backgroundImage: "url(/capa.png)" }}
+      />
       <div className="pointer-events-none fixed inset-0 bg-gradient-to-l from-[#0a1424] via-[#0a1424]/75 to-transparent" />
 
+      {/* conteúdo: rola quando o zoom deixa o form maior que a tela */}
       <div className="relative flex min-h-screen items-center justify-center px-6 py-16 sm:justify-end sm:px-12 lg:px-28">
         <div className="w-[24rem] max-w-full">
           <h1 className="text-3xl font-bold tracking-tight text-white">Entrar no sistema</h1>
