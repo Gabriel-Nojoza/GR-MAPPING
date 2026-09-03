@@ -167,7 +167,7 @@ export default function GerarProjeto() {
   const terrenoAtual = terrenosSalvos.find((item) => item.id === terrenoSelecionadoId);
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto max-w-7xl">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-sm font-medium text-primary">Criação assistida</p>
@@ -179,7 +179,7 @@ export default function GerarProjeto() {
         </div>
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
+      <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-[1.25fr_1fr] lg:items-start">
         <Card className="p-5 sm:p-6">
           <div className="flex rounded-xl bg-slate-100 p-1 text-sm font-medium">
             <button onClick={() => trocarFonte("upload")} className={`flex-1 rounded-lg px-3 py-2 transition ${fonte === "upload" ? "bg-white text-primary shadow-sm" : "text-slate-500"}`}>Nova foto</button>
@@ -236,7 +236,7 @@ export default function GerarProjeto() {
           </div>
         </Card>
 
-        <Card className="flex flex-col p-5 sm:p-6">
+        <Card className="flex flex-col p-5 sm:p-6 lg:sticky lg:top-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-primary"><ImagePlus size={20} /></div>
           <h2 className="mt-4 text-lg font-semibold text-slate-900">Descreva o projeto</h2>
           <p className="mt-1 text-sm text-slate-500">Informe a construção, acabamentos e ambientes desejados. Quanto mais direto, melhor.</p>
