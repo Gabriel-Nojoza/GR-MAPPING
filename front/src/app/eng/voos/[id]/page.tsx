@@ -7,7 +7,7 @@ import { ArrowLeft, ImagePlus, MapPin, Trash2, Upload } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Mapa } from "@/components/eng/mapa";
 import {
-  atualizarDeteccao, criarDeteccao, enviarFotosVoo, excluirDeteccao, fotoVooUrl,
+  atualizarDeteccao, enviarFotosVoo, excluirDeteccao, fotoVooUrl,
   getRecursosEng, getVoo,
   type Deteccao, type RecursoEng, type Voo,
 } from "@/lib/api";
@@ -36,7 +36,6 @@ export default function VooDetalhe() {
 
   const maqNome = useMemo(() => new Map(maquinas.map((m) => [m.id, m.nome])), [maquinas]);
   const qrDets = (voo?.deteccoes ?? []).filter((d) => d.metodo === "qr");
-  const manuaisDets = (voo?.deteccoes ?? []).filter((d) => d.metodo !== "qr");
   const semGps = !!voo && voo.total_fotos > 0 && voo.fotos_com_gps === 0;
 
   const centro = useMemo((): [number, number] | null => {
@@ -76,11 +75,16 @@ export default function VooDetalhe() {
   }
 
   async function marcar(lat: number, lon: number) {
-    if (!maquinaSel) { setErro("Escolha a máquina antes de clicar no mapa."); return; }
+    const semPos = (voo?.deteccoes ?? []).find(
+      (d) => d.lat == null && (maquinaSel ? d.maquina_id === maquinaSel : true),
+    );
+    if (!semPos) {
+      setAviso('Clique em "posicionar" numa máquina sem posição antes de marcar no mapa.');
+      return;
+    }
     try {
-      const semPos = (voo?.deteccoes ?? []).find((d) => d.maquina_id === maquinaSel && d.lat == null);
-      if (semPos) await atualizarDeteccao(semPos.id, { maquina_id: maquinaSel, lat, lon });
-      else await criarDeteccao(id, { maquina_id: maquinaSel, lat, lon });
+      await atualizarDeteccao(semPos.id, { maquina_id: semPos.maquina_id, lat, lon });
+      setMaquinaSel(""); setAviso("");
       await carregar();
     } catch (e) { setErro(e instanceof Error ? e.message : "Não foi possível marcar."); }
   }
@@ -113,7 +117,7 @@ export default function VooDetalhe() {
         <Card className="p-3">
           <Mapa center={centro} zoom={centro ? 17 : 4} busca pontos={pontos} onClique={marcar} altura="560px" />
           <p className="mt-2 text-xs text-slate-500">
-            Fotos com GPS posicionam a máquina sozinhas. Pra ajustar ou marcar as que faltam: escolha a máquina ao lado e clique no mapa.
+            Fotos com GPS posicionam a máquina sozinhas. Se alguma ficou &quot;sem posição&quot;, clique em <b>posicionar</b> ao lado e depois no mapa.
           </p>
         </Card>
 
@@ -157,7 +161,7 @@ export default function VooDetalhe() {
               <p className="text-xs text-slate-500">{qrDets.length} lida(s) automaticamente</p>
             </div>
             {qrDets.length === 0 ? (
-              <p className="p-4 text-sm text-slate-400">Nenhuma ainda. Suba as fotos ou marque na mão abaixo.</p>
+              <p className="p-4 text-sm text-slate-400">Nenhuma ainda. Suba as fotos do voo — o QR é lido automaticamente.</p>
             ) : (
               <div className="divide-y divide-slate-50">
                 {qrDets.map((d) => (
@@ -180,27 +184,6 @@ export default function VooDetalhe() {
                       )}
                       <button onClick={() => removerDet(d)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 size={14} /></button>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-
-          <Card className="p-5">
-            <h2 className="font-semibold text-slate-800">Marcar na mão</h2>
-            <p className="text-xs text-slate-500">Pra máquina que o QR não pegou.</p>
-            <label className="mt-3 block text-xs font-medium text-slate-600">Máquina</label>
-            <select value={maquinaSel} onChange={(e) => setMaquinaSel(e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm">
-              {maquinas.length === 0 && <option value="">Cadastre máquinas primeiro</option>}
-              {maquinas.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
-            </select>
-            <p className="mt-2 text-xs text-slate-500">Selecione e clique no mapa na posição da máquina.</p>
-            {manuaisDets.length > 0 && (
-              <div className="mt-3 divide-y divide-slate-50 border-t border-slate-100">
-                {manuaisDets.map((d) => (
-                  <div key={d.id} className="flex items-center justify-between gap-2 py-2 text-sm">
-                    <span className="text-slate-600">{maqNome.get(d.maquina_id) ?? "Máquina"} · <span className="text-xs text-slate-400">{d.progressiva_m != null ? `estaca ${d.progressiva_m} m` : "no mapa"}</span></span>
-                    <button onClick={() => removerDet(d)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 size={14} /></button>
                   </div>
                 ))}
               </div>
