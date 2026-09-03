@@ -53,6 +53,8 @@ class ConexaoPostgres:
                 kwargs={"row_factory": dict_row},
                 min_size=1,
                 max_size=5,
+                max_idle=120,   # recicla conexão ociosa antes do pooler do Supabase derrubar
+                check=ConnectionPool.check_connection,  # valida a conexão antes de entregar
                 open=True,
             )
         return _POOL_POSTGRES
