@@ -73,3 +73,25 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .login-logo-float, .login-entrance, .login-glow, .sidebar-logo, .sidebar-logo-wrap::before { animation: none; }
 }
+
+/* efeito de "scanner" passando pela foto do voo enquanto lê o QR */
+@keyframes qr-scan {
+  0%   { transform: translateY(-10%); }
+  100% { transform: translateY(1000%); }
+}
+.qr-scanning { position: relative; overflow: hidden; }
+.qr-scanning::after {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 10%;
+  background: linear-gradient(to bottom, rgba(56,189,248,0), rgba(56,189,248,0.55), rgba(56,189,248,0));
+  box-shadow: 0 0 18px 4px rgba(56, 189, 248, 0.5);
+  animation: qr-scan 1.5s linear infinite;
+}
+.qr-scanning::before {
+  content: ""; position: absolute; inset: 0; z-index: 1;
+  background:
+    linear-gradient(rgba(56,189,248,0.08) 1px, transparent 1px) 0 0 / 100% 14px,
+    linear-gradient(90deg, rgba(56,189,248,0.08) 1px, transparent 1px) 0 0 / 14px 100%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .qr-scanning::after { animation: none; opacity: 0.4; }
+}

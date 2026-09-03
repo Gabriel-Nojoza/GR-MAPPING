@@ -20,6 +20,7 @@ export default function VooDetalhe() {
   const [subindo, setSubindo] = useState(false);
   const [aviso, setAviso] = useState("");
   const [erro, setErro] = useState("");
+  const [scanPreviews, setScanPreviews] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const carregar = useCallback(async () => {
@@ -52,9 +53,12 @@ export default function VooDetalhe() {
 
   async function upload(files: FileList | null) {
     if (!files?.length) return;
+    const arr = Array.from(files);
+    const urls = arr.slice(0, 6).map((f) => URL.createObjectURL(f));
+    setScanPreviews(urls);
     try {
       setSubindo(true); setErro(""); setAviso("");
-      const r = await enviarFotosVoo(id, Array.from(files));
+      const r = await enviarFotosVoo(id, arr);
       if (fileRef.current) fileRef.current.value = "";
       setAviso(
         r.qrs_lidos > 0
@@ -65,7 +69,10 @@ export default function VooDetalhe() {
       );
       await carregar();
     } catch (e) { setErro(e instanceof Error ? e.message : "Falha no upload."); }
-    finally { setSubindo(false); }
+    finally {
+      setSubindo(false);
+      setTimeout(() => { urls.forEach((u) => URL.revokeObjectURL(u)); setScanPreviews([]); }, 600);
+    }
   }
 
   async function marcar(lat: number, lon: number) {
@@ -115,9 +122,27 @@ export default function VooDetalhe() {
             <h2 className="flex items-center gap-2 font-semibold text-slate-800"><Upload size={16} className="text-primary" /> Fotos do voo</h2>
             <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 p-6 text-sm text-slate-500 hover:border-primary hover:text-primary">
               <ImagePlus size={18} />
-              {subindo ? "Enviando e lendo os QRs…" : "Selecionar fotos do voo (várias)"}
+              {subindo ? "Lendo os QRs…" : "Selecionar fotos do voo (várias)"}
               <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" multiple className="hidden" onChange={(e) => upload(e.target.files)} />
             </label>
+
+            {scanPreviews.length > 0 && (
+              <div className="mt-3">
+                <div className="grid grid-cols-3 gap-2">
+                  {scanPreviews.map((u, i) => (
+                    <div key={i} className={`aspect-square rounded-lg border border-sky-300 bg-slate-900 ${subindo ? "qr-scanning" : ""}`}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={u} alt="" className="h-full w-full rounded-lg object-cover opacity-90" />
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-2 flex items-center gap-1.5 text-xs text-sky-600">
+                  <span className={`inline-block size-1.5 rounded-full bg-sky-500 ${subindo ? "animate-ping" : ""}`} />
+                  {subindo ? "Procurando os QR codes nas fotos…" : "Leitura concluída."}
+                </p>
+              </div>
+            )}
+
             {aviso && <p className="mt-2 rounded-lg bg-indigo-50 px-3 py-2 text-xs text-primary">{aviso}</p>}
             {semGps && (
               <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
