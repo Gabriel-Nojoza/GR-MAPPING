@@ -101,6 +101,37 @@ def _read_exif(img: Image.Image) -> dict:
 # ----------------------------------------------------------------------
 # XMP (DJI)
 # ----------------------------------------------------------------------
+def _read_exif_gps(img: Image.Image) -> tuple[float | None, float | None]:
+    """
+    Lê lat/lon do bloco GPS padrão do EXIF (tag GPSInfo) — fallback pra quando
+    o XMP da DJI não traz coordenada (aconteceu num teste real: XMP sem GPS,
+    mas o GPSInfo do EXIF tinha a posição certinha).
+    """
+    try:
+        exif = img.getexif()
+        if not exif:
+            return None, None
+        gps_ifd = exif.get_ifd(ExifTags.IFD.GPSInfo)
+    except Exception:
+        return None, None
+    if not gps_ifd:
+        return None, None
+
+    def _dms_para_decimal(dms, ref) -> float | None:
+        try:
+            graus, minutos, segundos = dms
+            valor = float(graus) + float(minutos) / 60 + float(segundos) / 3600
+        except (TypeError, ValueError, IndexError):
+            return None
+        if ref in ("S", "W"):
+            valor = -valor
+        return valor
+
+    lat = _dms_para_decimal(gps_ifd.get(2), gps_ifd.get(1))
+    lon = _dms_para_decimal(gps_ifd.get(4), gps_ifd.get(3))
+    return lat, lon
+
+
 def _extract_xmp(path: Path, img: Image.Image) -> str | None:
     """Pega o pacote XMP do JPEG (onde a DJI grava a altitude e o gimbal)."""
     # PIL às vezes já expõe o XMP
@@ -164,6 +195,7 @@ def read_photo_metadata(path: str | Path) -> PhotoMetadata:
             img = ImageOps.exif_transpose(img)
             exif = _read_exif(img)
             xmp_raw = _extract_xmp(path, img)
+            exif_gps_lat, exif_gps_lon = _read_exif_gps(img)
     except UnidentifiedImageError as e:
         raise ValueError("o arquivo enviado não é uma imagem válida (JPEG)") from e
     except OSError as e:
@@ -181,8 +213,10 @@ def read_photo_metadata(path: str | Path) -> PhotoMetadata:
         relative_altitude_m=dji.get("relative_altitude_m"),
         absolute_altitude_m=dji.get("absolute_altitude_m"),
         gimbal_pitch_deg=dji.get("gimbal_pitch_deg"),
-        gps_lat=dji.get("gps_lat"),
-        gps_lon=dji.get("gps_lon"),
+        # XMP da DJI primeiro (mais preciso quando presente); se faltar,
+        # cai pro GPSInfo padrão do EXIF, que a maioria das câmeras grava.
+        gps_lat=dji.get("gps_lat") if dji.get("gps_lat") is not None else exif_gps_lat,
+        gps_lon=dji.get("gps_lon") if dji.get("gps_lon") is not None else exif_gps_lon,
     )
 
 
