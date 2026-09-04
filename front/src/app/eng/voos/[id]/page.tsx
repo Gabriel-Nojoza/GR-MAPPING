@@ -44,11 +44,20 @@ export default function VooDetalhe() {
     return null;
   }, [voo]);
 
-  const pontos = (voo?.deteccoes ?? []).flatMap((d) =>
+  const pontosMaquinas = (voo?.deteccoes ?? []).flatMap((d) =>
     d.lat != null && d.lon != null
       ? [{ lat: d.lat, lon: d.lon, cor: d.status_maquina === "parada" ? "#ef4444" : "#2563eb", titulo: maqNome.get(d.maquina_id) ?? "Máquina" }]
       : [],
   );
+  // fotos com GPS que não têm máquina identificada — mostra um ponto cinza
+  // discreto, só pra confirmar onde a foto foi tirada (senão o mapa centraliza
+  // ali mas não deixa nada marcado, o que confunde).
+  const pontosFotos = (voo?.fotos ?? []).flatMap((f) =>
+    f.gps_lat != null && f.gps_lon != null
+      ? [{ lat: f.gps_lat, lon: f.gps_lon, cor: "#94a3b8", raio: 5, titulo: `Foto: ${f.nome_arquivo}` }]
+      : [],
+  );
+  const pontos = [...pontosMaquinas, ...pontosFotos];
 
   async function upload(files: FileList | null) {
     if (!files?.length) return;
@@ -117,6 +126,11 @@ export default function VooDetalhe() {
         <Card className="p-3">
           <Mapa center={centro} zoom={centro ? 17 : 4} busca pontos={pontos} onClique={marcar} altura="560px" />
           <p className="mt-2 text-xs text-slate-500">
+            <span className="mr-3 inline-flex items-center gap-1"><span className="inline-block size-2.5 rounded-full bg-slate-400" /> foto sem máquina</span>
+            <span className="mr-3 inline-flex items-center gap-1"><span className="inline-block size-2.5 rounded-full bg-blue-600" /> máquina em campo</span>
+            <span className="inline-flex items-center gap-1"><span className="inline-block size-2.5 rounded-full bg-red-500" /> máquina parada</span>
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
             Fotos com GPS posicionam a máquina sozinhas. Se alguma ficou &quot;sem posição&quot;, clique em <b>posicionar</b> ao lado e depois no mapa.
           </p>
         </Card>
