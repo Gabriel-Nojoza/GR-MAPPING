@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import {
@@ -21,22 +22,35 @@ import {
   SidebarNav,
   SidebarFooter,
 } from "./sidebar.styled";
+import { getRamoConfig } from "@/lib/ramos";
 
 const ITEMS = [
-  { href: "/eng", icon: LayoutDashboard, label: "Dashboard" },
-  { href: "/eng/obras", icon: HardHat, label: "Obras" },
-  { href: "/eng/equipamentos", icon: Truck, label: "Máquinas" },
-  { href: "/eng/trabalhadores", icon: Users, label: "Trabalhadores" },
-  { href: "/eng/operadores", icon: Joystick, label: "Operadores" },
-  { href: "/eng/voos", icon: Plane, label: "Voos" },
-  { href: "/eng/avanco", icon: TrendingUp, label: "Avanço" },
-  { href: "/eng/custos", icon: Coins, label: "Custos" },
-  { href: "/eng/configuracoes", icon: Settings, label: "Configurações" },
+  { href: "/eng", icon: LayoutDashboard, label: "Dashboard", chave: "eng_dashboard" },
+  { href: "/eng/obras", icon: HardHat, label: "Obras", chave: "eng_obras" },
+  { href: "/eng/equipamentos", icon: Truck, label: "Máquinas", chave: "eng_maquinas" },
+  { href: "/eng/trabalhadores", icon: Users, label: "Trabalhadores", chave: "eng_trabalhadores" },
+  { href: "/eng/operadores", icon: Joystick, label: "Operadores", chave: "eng_operadores" },
+  { href: "/eng/voos", icon: Plane, label: "Voos", chave: "eng_voos" },
+  { href: "/eng/avanco", icon: TrendingUp, label: "Avanço", chave: "eng_avanco" },
+  { href: "/eng/custos", icon: Coins, label: "Custos", chave: "eng_custos" },
+  { href: "/eng/configuracoes", icon: Settings, label: "Configurações", chave: "eng_configuracoes" },
 ] as const;
+
+// itens que só aparecem quando o admin liga a flag daquela empresa
+const OPCIONAIS = new Set(["eng_operadores", "eng_custos"]);
 
 export function EngenhariaSidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  // por padrão mostra tudo (evita sumir o item por 1 frame); some assim que
+  // a config real da empresa chega e a flag estiver desligada
+  const [sidebar, setSidebar] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    getRamoConfig().then((c) => setSidebar(c.sidebar)).catch(() => {});
+  }, []);
+
+  const itens = ITEMS.filter((item) => !OPCIONAIS.has(item.chave) || !sidebar || sidebar.includes(item.chave));
 
   function sair() {
     sessionStorage.removeItem("medicao-terreno:acesso");
@@ -60,7 +74,7 @@ export function EngenhariaSidebar() {
         </div>
       </SidebarHeader>
       <SidebarNav>
-        {ITEMS.map((item) => (
+        {itens.map((item) => (
           <SidebarItem
             key={item.href}
             href={item.href}

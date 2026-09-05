@@ -4,13 +4,16 @@ import { useEffect, useMemo, useState } from "react";
 import { Joystick, Search } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { getRecursosEng, recursoEngFotoUrl, type RecursoEng } from "@/lib/api";
+import { getRamoConfig } from "@/lib/ramos";
 
 export default function OperadoresPage() {
   const [lista, setLista] = useState<RecursoEng[]>([]);
   const [busca, setBusca] = useState("");
   const [erro, setErro] = useState("");
+  const [ativo, setAtivo] = useState<boolean | null>(null);
 
   useEffect(() => {
+    getRamoConfig().then((c) => setAtivo(c.sidebar.includes("eng_operadores"))).catch(() => setAtivo(true));
     getRecursosEng("operador")
       .then(setLista)
       .catch((e) => setErro(e instanceof Error ? e.message : "Não foi possível carregar os operadores."));
@@ -20,6 +23,16 @@ export default function OperadoresPage() {
     const q = busca.toLowerCase();
     return lista.filter((o) => [o.nome, o.dados.modelo_drone, o.dados.email].some((v) => v?.toLowerCase().includes(q)));
   }, [busca, lista]);
+
+  if (ativo === false) {
+    return (
+      <div className="mx-auto max-w-2xl">
+        <Card className="p-6 text-sm text-slate-500">
+          Esse módulo não está ativado pra sua empresa. Peça ao administrador do sistema pra liberar em <b>Configurações</b>.
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-[100rem]">

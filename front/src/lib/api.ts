@@ -351,3 +351,12 @@ export async function getCobrancas(mes: string) { return financeiroResposta(awai
 export async function criarCobranca(dados: { imovel_id: string; competencia: string; vencimento: string; valor_centavos?: number }) { return financeiroResposta(await fetch(`${API_URL}/cobrancas`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dados) })); }
 export async function marcarCobranca(id: string, status: "pendente" | "pago") { return financeiroResposta(await fetch(`${API_URL}/cobrancas/${id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) })); }
 export async function enviarLembreteCobranca(id: string) { return financeiroResposta(await fetch(`${API_URL}/cobrancas/${id}/enviar-lembrete`, { method: "POST" })); }
+
+// ---- chamados (falar com o dono do sistema) ------------------------------
+export type Chamado = {
+  id: string; criado_em: string; empresa_id: string; usuario_nome: string | null;
+  usuario_email: string | null; assunto: string | null; mensagem: string;
+  status: "aberto" | "respondido" | "fechado"; resposta: string | null; respondido_em: string | null;
+};
+export async function getChamados() { return financeiroResposta(await fetch(`${API_URL}/chamados`, { headers: authHeaders(), cache: "no-store" })) as Promise<Chamado[]>; }
+export async function abrirChamado(dados: { assunto?: string; mensagem: string }) { return financeiroResposta(await fetch(`${API_URL}/chamados`, { method: "POST", headers: authHeaders(), body: JSON.stringify(dados) })) as Promise<Chamado>; }

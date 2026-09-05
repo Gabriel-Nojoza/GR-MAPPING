@@ -322,6 +322,20 @@ def init_db() -> None:
             )
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS chamados (
+                id TEXT PRIMARY KEY,
+                criado_em TEXT NOT NULL,
+                empresa_id TEXT NOT NULL,
+                usuario_nome TEXT,
+                usuario_email TEXT,
+                assunto TEXT,
+                mensagem TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'aberto',
+                resposta TEXT,
+                respondido_em TEXT
+            )
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS modelos_mensagem_leads (
                 id TEXT PRIMARY KEY,
                 criado_em TEXT NOT NULL,
@@ -361,6 +375,13 @@ def init_db() -> None:
             colunas_empresas = {r["name"] for r in conn.execute("PRAGMA table_info(empresas)")}
         if "ramo" not in colunas_empresas:
             conn.execute("ALTER TABLE empresas ADD COLUMN ramo TEXT NOT NULL DEFAULT 'imobiliaria'")
+
+        # migração leve: módulos opcionais da engenharia, ligados/desligados
+        # por empresa pelo admin (superadmin) — desativados por padrão
+        if "mostrar_operadores" not in colunas_empresas:
+            conn.execute("ALTER TABLE empresas ADD COLUMN mostrar_operadores INTEGER NOT NULL DEFAULT 0")
+        if "mostrar_custos" not in colunas_empresas:
+            conn.execute("ALTER TABLE empresas ADD COLUMN mostrar_custos INTEGER NOT NULL DEFAULT 0")
 
         # migração leve: operador do voo (quem pilotou o drone)
         if DATABASE_URL:
@@ -718,6 +739,48 @@ def excluir_contrato(id_: str) -> bool:
 
 
 # ----------------------------------------------------------------------
+# chamados (empresa fala com o admin/dono do sistema)
+# ----------------------------------------------------------------------
+def listar_chamados(empresa_id: str | None = None) -> list[sqlite3.Row]:
+    with _conectar() as conn:
+        if empresa_id:
+            return conn.execute(
+                "SELECT * FROM chamados WHERE empresa_id = ? ORDER BY criado_em DESC", (empresa_id,)
+            ).fetchall()
+        return conn.execute("SELECT * FROM chamados ORDER BY criado_em DESC").fetchall()
+
+
+def obter_chamado(id_: str) -> sqlite3.Row | None:
+    with _conectar() as conn:
+        return conn.execute("SELECT * FROM chamados WHERE id = ?", (id_,)).fetchone()
+
+
+def criar_chamado(id_: str, empresa_id: str, usuario_nome: str | None, usuario_email: str | None,
+                  assunto: str | None, mensagem: str) -> None:
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO chamados (id, criado_em, empresa_id, usuario_nome, usuario_email, assunto, mensagem, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 'aberto')",
+            (id_, _agora(), empresa_id, usuario_nome, usuario_email, assunto, mensagem),
+        )
+
+
+def responder_chamado(id_: str, resposta: str, status: str) -> bool:
+    with _conectar() as conn:
+        cur = conn.execute(
+            "UPDATE chamados SET resposta = ?, status = ?, respondido_em = ? WHERE id = ?",
+            (resposta, status, _agora(), id_),
+        )
+        return cur.rowcount > 0
+
+
+def atualizar_status_chamado(id_: str, status: str) -> bool:
+    with _conectar() as conn:
+        cur = conn.execute("UPDATE chamados SET status = ? WHERE id = ?", (status, id_))
+        return cur.rowcount > 0
+
+
+# ----------------------------------------------------------------------
 # usuÃ¡rios de acesso
 # ----------------------------------------------------------------------
 def obter_usuario_por_email(email: str) -> sqlite3.Row | None:
@@ -836,6 +899,16 @@ def criar_empresa_com_acesso(
 def obter_empresa(id_: str) -> sqlite3.Row | None:
     with _conectar() as conn:
         return conn.execute("SELECT * FROM empresas WHERE id = ?", (id_,)).fetchone()
+
+
+def atualizar_flags_empresa(id_: str, mostrar_operadores: bool, mostrar_custos: bool) -> bool:
+    """Liga/desliga módulos opcionais da engenharia pra uma empresa (feito pelo admin)."""
+    with _conectar() as conn:
+        cur = conn.execute(
+            "UPDATE empresas SET mostrar_operadores = ?, mostrar_custos = ? WHERE id = ?",
+            (1 if mostrar_operadores else 0, 1 if mostrar_custos else 0, id_),
+        )
+        return cur.rowcount > 0
 
 
 def obter_empresa_por_nome(nome: str) -> sqlite3.Row | None:

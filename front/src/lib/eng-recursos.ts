@@ -215,13 +215,11 @@ export const MODULOS: Record<string, ModuloEng> = {
       { key: "funcao", label: "Função", tipo: "select", col: 1, opcoes: ["Engenheiro", "Encarregado", "Operador", "Ajudante", "Topógrafo", "Motorista", "Outro"] },
       { key: "cor_capacete", label: "Cor do capacete", tipo: "select", col: 1, opcoes: ["Branco", "Azul", "Amarelo", "Verde", "Vermelho", "Laranja"] },
       { key: "obra", label: "Obra", tipo: "obra", col: 1 },
-      { key: "telefone", label: "Telefone", tipo: "texto", col: 1 },
     ],
     colunas: [
       { label: "Função", tipo: "badge", valor: (r) => t(r, "funcao") },
       { label: "Capacete", tipo: "badge", valor: (r) => t(r, "cor_capacete") },
       { label: "Obra", valor: (r, c) => c.obraNome(r.dados.obra) },
-      { label: "Telefone", valor: (r) => t(r, "telefone") },
     ],
     resumo: [
       { label: "trabalhador(es)", valor: (rs) => String(rs.length) },

@@ -152,6 +152,21 @@ class ContratoDados(BaseModel):
     status: str = "rascunho"
 
 
+class EmpresaFlagsDados(BaseModel):
+    mostrar_operadores: bool = False
+    mostrar_custos: bool = False
+
+
+class ChamadoDados(BaseModel):
+    assunto: str | None = None
+    mensagem: str
+
+
+class ChamadoRespostaDados(BaseModel):
+    resposta: str
+    status: str = "respondido"
+
+
 @app.post("/auth/login")
 def login(dados: LoginDados):
     """Confere as credenciais informadas na tela de login."""
@@ -169,7 +184,42 @@ def login(dados: LoginDados):
 @app.get("/config/ramo")
 def config_do_ramo(contexto: dict | None = Depends(contexto_usuario)):
     """Configuração do ramo da empresa do usuário logado (sidebar + campos de cliente)."""
-    return ramos.config_ramo(ramo_do_contexto(contexto))
+    config = ramos.config_ramo(ramo_do_contexto(contexto))
+
+    # módulos opcionais da engenharia (Operadores, Custos) só entram na
+    # sidebar se o admin tiver ligado a flag daquela empresa
+    empresa_id = _empresa_do_contexto(contexto)
+    empresa = db.obter_empresa(empresa_id) if empresa_id else None
+    if not (empresa and empresa["mostrar_operadores"]):
+        config["sidebar"] = [item for item in config["sidebar"] if item != "eng_operadores"]
+    if not (empresa and empresa["mostrar_custos"]):
+        config["sidebar"] = [item for item in config["sidebar"] if item != "eng_custos"]
+    return config
+
+
+@app.get("/chamados")
+def listar_meus_chamados(contexto: dict | None = Depends(contexto_usuario)):
+    """Chamados abertos pela empresa do usuário logado, pro dono do sistema."""
+    empresa_id = _empresa_do_contexto(contexto)
+    if not empresa_id:
+        return []
+    return [dict(c) for c in db.listar_chamados(empresa_id)]
+
+
+@app.post("/chamados")
+def abrir_chamado(dados: ChamadoDados, contexto: dict | None = Depends(contexto_usuario)):
+    empresa_id = _empresa_do_contexto(contexto)
+    if not empresa_id:
+        raise HTTPException(status_code=400, detail="Usuário sem empresa vinculada.")
+    if not dados.mensagem.strip():
+        raise HTTPException(status_code=400, detail="Escreva a mensagem do chamado.")
+    chamado_id = uuid.uuid4().hex
+    db.criar_chamado(
+        chamado_id, empresa_id, _nome_do_contexto(contexto),
+        contexto.get("email") if contexto else None,
+        (dados.assunto or "").strip() or None, dados.mensagem.strip(),
+    )
+    return dict(db.obter_chamado(chamado_id))
 
 
 def _extensao_por_mime(mime: str | None, padrao: str) -> str:
@@ -1713,6 +1763,26 @@ def admin_excluir_contrato(contrato_id: str, _: dict = Depends(exigir_superadmin
     return {"ok": True}
 
 
+@app.get("/admin/chamados")
+def admin_listar_chamados(_: dict = Depends(exigir_superadmin)):
+    empresas = {e["id"]: e["nome"] for e in db.listar_empresas()}
+    saida = []
+    for c in db.listar_chamados():
+        c = dict(c)
+        c["empresa_nome"] = empresas.get(c["empresa_id"], "—")
+        saida.append(c)
+    return saida
+
+
+@app.patch("/admin/chamados/{chamado_id}")
+def admin_responder_chamado(chamado_id: str, dados: ChamadoRespostaDados, _: dict = Depends(exigir_superadmin)):
+    if not dados.resposta.strip():
+        raise HTTPException(status_code=400, detail="Escreva a resposta do chamado.")
+    if not db.responder_chamado(chamado_id, dados.resposta.strip(), dados.status or "respondido"):
+        raise HTTPException(status_code=404, detail="Chamado não encontrado.")
+    return dict(db.obter_chamado(chamado_id))
+
+
 @app.get("/admin/empresas")
 def admin_listar_empresas(_: dict = Depends(exigir_superadmin)):
     return [dict(empresa) for empresa in db.listar_empresas()]
@@ -1779,6 +1849,15 @@ def admin_criar_empresa(dados: EmpresaDados, _: dict = Depends(exigir_superadmin
     else:
         db.criar_empresa(identificador, nome, dados.cnpj.strip() if dados.cnpj else None, plano, ramo=ramo)
     return next(dict(empresa) for empresa in db.listar_empresas() if empresa["id"] == identificador)
+
+
+@app.patch("/admin/empresas/{empresa_id}/flags")
+def admin_atualizar_flags_empresa(empresa_id: str, dados: EmpresaFlagsDados, _: dict = Depends(exigir_superadmin)):
+    """Liga/desliga os módulos opcionais (Operadores, Custos) na barra lateral da empresa."""
+    if db.obter_empresa(empresa_id) is None:
+        raise HTTPException(status_code=404, detail="Empresa não encontrada.")
+    db.atualizar_flags_empresa(empresa_id, dados.mostrar_operadores, dados.mostrar_custos)
+    return next(dict(empresa) for empresa in db.listar_empresas() if empresa["id"] == empresa_id)
 
 
 @app.get("/admin/usuarios")

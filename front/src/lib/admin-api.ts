@@ -11,6 +11,8 @@ export type Empresa = {
   status: "ativo" | "suspenso";
   ramo: RamoEmpresa;
   total_usuarios: number;
+  mostrar_operadores?: boolean | number;
+  mostrar_custos?: boolean | number;
 };
 
 export type UsuarioAdmin = {
@@ -59,6 +61,14 @@ export async function criarEmpresa(dados: {
 }): Promise<Empresa> {
   return respostaAdmin(await fetch(`${API_URL}/admin/empresas`, {
     method: "POST",
+    headers: cabecalhos(),
+    body: JSON.stringify(dados),
+  }));
+}
+
+export async function atualizarFlagsEmpresa(id: string, dados: { mostrar_operadores: boolean; mostrar_custos: boolean }): Promise<Empresa> {
+  return respostaAdmin(await fetch(`${API_URL}/admin/empresas/${id}/flags`, {
+    method: "PATCH",
     headers: cabecalhos(),
     body: JSON.stringify(dados),
   }));
@@ -118,6 +128,19 @@ export async function atualizarContrato(id: string, d: ContratoInput): Promise<C
 }
 export async function excluirContrato(id: string): Promise<void> {
   await respostaAdmin(await fetch(`${API_URL}/admin/contratos/${id}`, { method: "DELETE", headers: cabecalhos() }));
+}
+
+export type ChamadoAdmin = {
+  id: string; criado_em: string; empresa_id: string; empresa_nome: string;
+  usuario_nome: string | null; usuario_email: string | null; assunto: string | null;
+  mensagem: string; status: "aberto" | "respondido" | "fechado";
+  resposta: string | null; respondido_em: string | null;
+};
+export async function listarChamadosAdmin(): Promise<ChamadoAdmin[]> {
+  return respostaAdmin(await fetch(`${API_URL}/admin/chamados`, { headers: cabecalhos(), cache: "no-store" }));
+}
+export async function responderChamado(id: string, dados: { resposta: string; status: string }): Promise<ChamadoAdmin> {
+  return respostaAdmin(await fetch(`${API_URL}/admin/chamados/${id}`, { method: "PATCH", headers: cabecalhos(), body: JSON.stringify(dados) }));
 }
 
 export type ModeloMensagemLead = { id: string; criado_em: string; titulo: string; conteudo: string; };

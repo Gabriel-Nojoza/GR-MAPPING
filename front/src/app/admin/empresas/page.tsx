@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Building2, Plus, Search, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { criarEmpresa, listarEmpresas, type Empresa, type RamoEmpresa } from "@/lib/admin-api";
+import { atualizarFlagsEmpresa, criarEmpresa, listarEmpresas, type Empresa, type RamoEmpresa } from "@/lib/admin-api";
 import { RAMOS } from "@/lib/ramos";
 
 const RAMO_ROTULO: Record<RamoEmpresa, string> = {
@@ -46,6 +46,15 @@ export default function EmpresasAdmin() {
   }
 
   const filtradas = empresas.filter((empresa) => `${empresa.nome} ${empresa.cnpj ?? ""}`.toLowerCase().includes(busca.toLowerCase()));
+
+  async function alternarFlag(empresa: Empresa, campo: "mostrar_operadores" | "mostrar_custos") {
+    const atual = { mostrar_operadores: !!empresa.mostrar_operadores, mostrar_custos: !!empresa.mostrar_custos };
+    const novo = { ...atual, [campo]: !atual[campo] };
+    try {
+      const atualizada = await atualizarFlagsEmpresa(empresa.id, novo);
+      setEmpresas((lista) => lista.map((e) => (e.id === empresa.id ? atualizada : e)));
+    } catch (causa) { setErro(causa instanceof Error ? causa.message : "Não foi possível atualizar."); }
+  }
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -110,11 +119,12 @@ export default function EmpresasAdmin() {
                 <th className="px-5 py-3">Plano</th>
                 <th className="px-5 py-3">Acessos</th>
                 <th className="px-5 py-3">Status</th>
+                <th className="px-5 py-3">Módulos opcionais</th>
               </tr>
             </thead>
             <tbody>
               {filtradas.length === 0 ? (
-                <tr><td colSpan={5} className="px-5 py-14 text-center text-slate-400">Nenhuma empresa cadastrada.</td></tr>
+                <tr><td colSpan={6} className="px-5 py-14 text-center text-slate-400">Nenhuma empresa cadastrada.</td></tr>
               ) : filtradas.map((empresa) => (
                 <tr key={empresa.id} className="border-b border-slate-50 last:border-0">
                   <td className="px-5 py-4">
@@ -125,6 +135,22 @@ export default function EmpresasAdmin() {
                   <td className="px-5 py-4 capitalize text-slate-600">{empresa.plano}</td>
                   <td className="px-5 py-4 text-slate-600">{empresa.total_usuarios}</td>
                   <td className="px-5 py-4"><span className={`rounded-full px-2.5 py-1 text-xs ${empresa.status === "ativo" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>{empresa.status}</span></td>
+                  <td className="px-5 py-4">
+                    {empresa.ramo !== "engenharia" ? (
+                      <span className="text-xs text-slate-400">—</span>
+                    ) : (
+                      <div className="flex flex-col gap-1.5 text-xs">
+                        <label className="flex items-center gap-1.5">
+                          <input type="checkbox" checked={!!empresa.mostrar_operadores} onChange={() => void alternarFlag(empresa, "mostrar_operadores")} className="accent-primary" />
+                          Operadores
+                        </label>
+                        <label className="flex items-center gap-1.5">
+                          <input type="checkbox" checked={!!empresa.mostrar_custos} onChange={() => void alternarFlag(empresa, "mostrar_custos")} className="accent-primary" />
+                          Custos
+                        </label>
+                      </div>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
