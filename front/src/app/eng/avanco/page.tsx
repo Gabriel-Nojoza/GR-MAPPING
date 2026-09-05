@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Gauge, Ruler, TrendingUp } from "lucide-react";
+import { Coins, Gauge, Ruler, TrendingUp } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Mapa, type SegmentoMapa } from "@/components/eng/mapa";
 import { compararVoos, getRecursosEng, getVoos, type Comparacao, type RecursoEng, type Voo } from "@/lib/api";
+import { brl, custoDiarioEquipamento } from "@/lib/eng-recursos";
 
 const ORDEM_TURNO: Record<string, number> = { "Manhã": 0, "Único": 1, "Tarde": 2 };
 const dataBr = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("pt-BR");
@@ -14,15 +15,23 @@ type Dia = { chave: string; obraId: string; obraNome: string; data: string; voos
 export default function AvancoPage() {
   const [obras, setObras] = useState<RecursoEng[]>([]);
   const [voos, setVoos] = useState<Voo[]>([]);
+  const [maquinas, setMaquinas] = useState<RecursoEng[]>([]);
   const [comp, setComp] = useState<Comparacao | null>(null);
   const [selecionado, setSelecionado] = useState("");
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    Promise.all([getRecursosEng("obra"), getVoos()])
-      .then(([o, v]) => { setObras(o); setVoos(v); })
+    Promise.all([getRecursosEng("obra"), getVoos(), getRecursosEng("equipamento")])
+      .then(([o, v, m]) => { setObras(o); setVoos(v); setMaquinas(m); })
       .catch(() => {});
   }, []);
+
+  // custo/dia de cada máquina, rateado do valor mensal cadastrado — usado
+  // pra cruzar com o avanço medido pelo drone (quanto custou x quanto andou)
+  const custoDiaPorMaquina = useMemo(
+    () => new Map(maquinas.map((m) => [m.id, custoDiarioEquipamento(m)])),
+    [maquinas],
+  );
 
   const dias = useMemo<Dia[]>(() => {
     const nome = new Map(obras.map((o) => [o.id, o.nome]));
@@ -97,10 +106,11 @@ export default function AvancoPage() {
           {!comp && !erro && <Card className="grid h-64 place-items-center text-sm text-slate-400">Escolha um dia à esquerda.</Card>}
           {comp && (
             <div className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <Card className="p-5"><Ruler size={18} className="text-primary" /><p className="mt-3 text-sm text-slate-500">Avanço total do dia</p><p className="mt-1 text-2xl font-semibold text-slate-900">{comp.avanco_total_m} m</p></Card>
                 <Card className="p-5"><Gauge size={18} className="text-amber-600" /><p className="mt-3 text-sm text-slate-500">Máquinas paradas</p><p className="mt-1 text-2xl font-semibold text-slate-900">{comp.maquinas.filter((m) => m.parada).length} / {comp.maquinas.length}</p></Card>
                 <Card className="p-5"><TrendingUp size={18} className="text-emerald-600" /><p className="mt-3 text-sm text-slate-500">Máquinas em campo</p><p className="mt-1 text-2xl font-semibold text-slate-900">{comp.maquinas.length}</p></Card>
+                <Card className="p-5"><Coins size={18} className="text-slate-400" /><p className="mt-3 text-sm text-slate-500">Gasto estimado do dia</p><p className="mt-1 text-2xl font-semibold text-slate-900">{brl(comp.maquinas.reduce((s, m) => s + (custoDiaPorMaquina.get(m.maquina_id) ?? 0), 0))}</p></Card>
               </div>
 
               <div className="grid gap-5 lg:grid-cols-2">
@@ -116,25 +126,39 @@ export default function AvancoPage() {
                       <thead>
                         <tr className="border-b border-slate-100 text-xs text-slate-400">
                           <th className="px-4 py-2.5">Máquina</th><th className="px-4 py-2.5">Avanço</th><th className="px-4 py-2.5">Situação</th>
+                          <th className="px-4 py-2.5">Gasto do dia</th><th className="px-4 py-2.5">R$/m</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {comp.maquinas.map((m) => (
-                          <tr key={m.maquina_id} className="border-b border-slate-50 last:border-0">
+                        {comp.maquinas.map((m) => {
+                          const gasto = custoDiaPorMaquina.get(m.maquina_id) ?? 0;
+                          const desperdicio = m.parada && gasto > 0;
+                          return (
+                          <tr key={m.maquina_id} className={`border-b border-slate-50 last:border-0 ${desperdicio ? "bg-red-50/40" : ""}`}>
                             <td className="px-4 py-3 font-medium text-slate-700">{m.maquina_nome}</td>
                             <td className="px-4 py-3 text-slate-700">{m.avanco_m != null ? `${m.avanco_m} m` : "—"}</td>
                             <td className="px-4 py-3">
                               {m.avanco_m == null
-                                ? <span className="text-slate-400">só apareceu num voo</span>
+                                ? <span className="text-slate-400">sem posição nas fotos</span>
                                 : m.parada
                                   ? <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs text-red-700">parada</span>
                                   : <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700">trabalhando</span>}
                             </td>
+                            <td className="px-4 py-3 text-slate-600">{gasto > 0 ? brl(gasto) : "—"}</td>
+                            <td className="px-4 py-3">
+                              {desperdicio
+                                ? <span className="font-medium text-red-700">pagou e não andou</span>
+                                : m.avanco_m ? brl(gasto / m.avanco_m) : "—"}
+                            </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
+                  <p className="border-t border-slate-100 px-4 py-2.5 text-xs text-slate-400">
+                    Gasto do dia = custo mensal cadastrado da máquina ÷ 26 dias úteis. Linhas em vermelho: gerou custo e não andou.
+                  </p>
                 </Card>
               </div>
             </div>

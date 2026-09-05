@@ -108,22 +108,18 @@ export const MODULOS: Record<string, ModuloEng> = {
       { key: "obra", label: "Obra", tipo: "obra", col: 1 },
       { key: "status", label: "Status", tipo: "select", col: 1, opcoes: ["Em campo", "Disponível", "Manutenção"] },
       { key: "quantidade", label: "Quantidade", tipo: "numero", col: 1 },
-      { key: "horas_utilizadas", label: "Horas de utilização", tipo: "numero", col: 1 },
-      { key: "custo_hora", label: "Custo por hora (R$)", tipo: "moeda", col: 1 },
+      { key: "custo_mensal", label: "Custo mensal (R$)", tipo: "moeda", col: 1, placeholder: "Valor pago por mês por essa máquina (aluguel/diesel/operador)" },
     ],
     colunas: [
       { label: "Tipo", valor: (r) => t(r, "tipo_equip") },
       { label: "Obra", valor: (r, c) => c.obraNome(r.dados.obra) },
       { label: "Qtd", valor: (r) => String(n(r, "quantidade") || "—") },
-      { label: "Horas", valor: (r) => String(n(r, "horas_utilizadas") || "—") },
-      { label: "Custo/h", tipo: "moeda", valor: (r) => brl(n(r, "custo_hora")) },
-      { label: "Custo total", tipo: "moeda", valor: (r) => brl(n(r, "horas_utilizadas") * n(r, "custo_hora")) },
+      { label: "Custo/mês", tipo: "moeda", valor: (r) => brl(n(r, "custo_mensal")) },
       { label: "Status", tipo: "badge", valor: (r) => t(r, "status") },
     ],
     resumo: [
       { label: "equipamento(s)", valor: (rs) => String(rs.length) },
-      { label: "horas", valor: (rs) => String(soma(rs, (r) => n(r, "horas_utilizadas"))) },
-      { label: "custo total", cor: "emerald", valor: (rs) => brl(soma(rs, (r) => n(r, "horas_utilizadas") * n(r, "custo_hora"))) },
+      { label: "custo mensal total", cor: "emerald", valor: (rs) => brl(soma(rs, (r) => n(r, "custo_mensal"))) },
     ],
   },
 
@@ -314,7 +310,10 @@ export const BADGE_CORES: Record<string, string> = {
 };
 
 // ---- agregações (usadas em Custos e no Dashboard) ----------------------
-export const custoEquipamento = (r: RecursoEng) => n(r, "horas_utilizadas") * n(r, "custo_hora");
+// dias úteis considerados num mês, pra ratear o custo mensal por dia/turno
+export const DIAS_UTEIS_MES = 26;
+export const custoEquipamento = (r: RecursoEng) => n(r, "custo_mensal");
+export const custoDiarioEquipamento = (r: RecursoEng) => n(r, "custo_mensal") / DIAS_UTEIS_MES;
 export const custoMaterial = (r: RecursoEng) => n(r, "quantidade_consumida") * n(r, "custo_unitario");
 export const valorNum = n;
 export const metrosMedicao = (r: RecursoEng) => n(r, "quantidade");
