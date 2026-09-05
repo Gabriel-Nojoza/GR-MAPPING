@@ -23,6 +23,15 @@ except ImportError:
 PREFIXO = "GRM:"
 _WECHAT = None
 
+# tamanhos-alvo (lado maior, em px) tentados em ordem. Fotos de drone reais
+# já vêm enormes (4000px+) — upscale por MULTIPLICADOR fixo (ex.: x3) nelas
+# explode pra imagens gigantescas (12000px+) e o WeChatQRCode passa minutos
+# rodando à toa quando não acha QR nenhum (o caso mais comum: a maioria das
+# fotos de um voo não está centrada numa máquina). Redimensionar pra um
+# tamanho-alvo ABSOLUTO mantém o custo previsível não importa a resolução
+# de origem (encolhe foto grande, aumenta foto pequena).
+_ALVOS_LADO_MAIOR = (1600, 2800, 4200)
+
 
 def disponivel() -> bool:
     return cv2 is not None
@@ -36,6 +45,19 @@ def _wechat():
         except cv2.error:
             _WECHAT = False
     return _WECHAT or None
+
+
+def _redimensionar_para_lado_maior(imagem, alvo_lado_maior: int):
+    """Reescala pra que o lado maior fique perto de `alvo_lado_maior`px (encolhe OU aumenta)."""
+    h, w = imagem.shape[:2]
+    atual = max(h, w)
+    if atual == 0:
+        return imagem, 1.0
+    escala = alvo_lado_maior / atual
+    if abs(escala - 1.0) < 0.02:
+        return imagem, 1.0
+    interp = cv2.INTER_CUBIC if escala > 1.0 else cv2.INTER_AREA
+    return cv2.resize(imagem, None, fx=escala, fy=escala, interpolation=interp), escala
 
 
 def ler_qrs(caminho: str | Path) -> list[dict]:
@@ -53,8 +75,8 @@ def ler_qrs(caminho: str | Path) -> list[dict]:
 
     wq = _wechat()
     if wq is not None:
-        for escala in (1.0, 2.0, 3.0):
-            img = imagem if escala == 1.0 else cv2.resize(imagem, None, fx=escala, fy=escala, interpolation=cv2.INTER_CUBIC)
+        for alvo in _ALVOS_LADO_MAIOR:
+            img, escala = _redimensionar_para_lado_maior(imagem, alvo)
             try:
                 textos, pontos = wq.detectAndDecode(img)
             except cv2.error:

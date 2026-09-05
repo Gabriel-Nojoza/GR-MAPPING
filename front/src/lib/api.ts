@@ -280,6 +280,7 @@ export type Voo = {
   criado_por?: string | null;
   total_fotos: number; total_deteccoes: number; fotos_com_gps: number;
   fotos?: VooFoto[]; deteccoes?: Deteccao[];
+  pessoas_por_cor?: Record<string, number>; pessoas_total_estimado?: number;
 };
 export type VooFoto = { id: string; nome_arquivo: string; mime?: string | null; gps_lat: number | null; gps_lon: number | null; altitude_m: number | null; tirada_em: string | null; tem_qr: number };
 export type Deteccao = { id: string; voo_id: string; foto_id: string | null; maquina_id: string; frente_id: string | null; lat: number | null; lon: number | null; progressiva_m: number | null; metodo: string; status_maquina: string | null; foto_tirada_em?: string | null };

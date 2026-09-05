@@ -38,6 +38,7 @@ load_dotenv()  # lê o .env local (GEMINI_API_KEY) antes de qualquer coisa
 from app import db, ramos
 from app.metadata import read_photo_metadata, PhotoMetadata, dados_foto_voo
 from app import qr as leitor_qr
+from app import pessoas as contador_pessoas
 from app.gsd import compute_gsd
 from app.area import area_do_poligono
 from app.ia_projeto import (
@@ -1458,6 +1459,19 @@ def obter_voo(voo_id: str):
         deteccoes.append(d)
     resultado["fotos"] = fotos
     resultado["deteccoes"] = deteccoes
+
+    # soma a contagem estimada de pessoas (por cor de capacete) de todas as
+    # fotos do voo — é uma estimativa por foto, não uma pessoa única rastreada
+    pessoas: dict[str, int] = {}
+    for f in fotos:
+        try:
+            parcial = json.loads(f.get("pessoas_json") or "{}")
+        except (TypeError, ValueError):
+            parcial = {}
+        for cor, qtd in parcial.items():
+            pessoas[cor] = pessoas.get(cor, 0) + qtd
+    resultado["pessoas_por_cor"] = pessoas
+    resultado["pessoas_total_estimado"] = sum(pessoas.values())
     return resultado
 
 
@@ -1535,6 +1549,14 @@ def enviar_fotos_voo(voo_id: str, fotos: list[UploadFile] = File(...),
                               frente["id"] if frente else None, lat, lon, prog, "qr", None)
             ja_detectadas.add(mid)
             qrs_lidos += 1
+
+        # contagem estimada de pessoas por cor de capacete (best-effort)
+        try:
+            contagem = contador_pessoas.contar_capacetes(caminho)
+        except Exception:
+            contagem = {}
+        if contagem:
+            db.marcar_foto_pessoas(foto_id, json.dumps(contagem, ensure_ascii=False))
 
     return {"ok": True, "adicionadas": salvas, "qrs_lidos": qrs_lidos, "leitor_ativo": leitor_qr.disponivel()}
 

@@ -272,7 +272,8 @@ def init_db() -> None:
                 gps_lon REAL,
                 altitude_m REAL,
                 tirada_em TEXT,
-                tem_qr INTEGER NOT NULL DEFAULT 0
+                tem_qr INTEGER NOT NULL DEFAULT 0,
+                pessoas_json TEXT
             )
         """)
         conn.execute("""
@@ -394,6 +395,16 @@ def init_db() -> None:
             conn.execute("ALTER TABLE eng_voos ADD COLUMN operador_id TEXT")
         if colunas_voos and "criado_por" not in colunas_voos:
             conn.execute("ALTER TABLE eng_voos ADD COLUMN criado_por TEXT")
+
+        # migração leve: contagem estimada de pessoas por cor de capacete na foto
+        if DATABASE_URL:
+            colunas_voo_fotos = {r["column_name"] for r in conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = %s", ("eng_voo_fotos",)
+            )}
+        else:
+            colunas_voo_fotos = {r["name"] for r in conn.execute("PRAGMA table_info(eng_voo_fotos)")}
+        if colunas_voo_fotos and "pessoas_json" not in colunas_voo_fotos:
+            conn.execute("ALTER TABLE eng_voo_fotos ADD COLUMN pessoas_json TEXT")
 
         if DATABASE_URL:
             colunas_usuarios = {r["column_name"] for r in conn.execute(
@@ -1318,6 +1329,12 @@ def obter_foto_voo(id_: str) -> sqlite3.Row | None:
 def marcar_foto_qr(id_: str) -> None:
     with _conectar() as conn:
         conn.execute("UPDATE eng_voo_fotos SET tem_qr = 1 WHERE id = ?", (id_,))
+
+
+def marcar_foto_pessoas(id_: str, pessoas_json: str) -> None:
+    """Grava a contagem estimada de pessoas por cor de capacete daquela foto."""
+    with _conectar() as conn:
+        conn.execute("UPDATE eng_voo_fotos SET pessoas_json = ? WHERE id = ?", (pessoas_json, id_))
 
 
 def criar_deteccao(id_: str, voo_id: str, foto_id: str | None, maquina_id: str,
