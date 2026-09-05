@@ -176,7 +176,9 @@ def _extensao_por_mime(mime: str | None, padrao: str) -> str:
     return {
         "image/jpeg": ".jpg",
         "image/png": ".png",
+        "image/webp": ".webp",
         "video/mp4": ".mp4",
+        "video/quicktime": ".mov",
     }.get(mime or "", padrao)
 
 
@@ -1432,17 +1434,32 @@ def enviar_fotos_voo(voo_id: str, fotos: list[UploadFile] = File(...),
     coords_frente = _linha_da_frente(frente["geojson"]) if frente else []
     ja_detectadas = {d["maquina_id"] for d in db.listar_deteccoes(voo_id) if d["metodo"] == "qr"}
 
+    TIPOS_IMAGEM = {"image/jpeg", "image/png", "image/webp"}
+    TIPOS_VIDEO = {"video/mp4", "video/quicktime"}
+    LIMITE_IMAGEM = 25 * 1024 * 1024
+    LIMITE_VIDEO = 500 * 1024 * 1024
+
     salvas, qrs_lidos = 0, 0
     for foto in fotos:
-        if foto.content_type not in {"image/jpeg", "image/png", "image/webp"}:
+        eh_video = foto.content_type in TIPOS_VIDEO
+        if not eh_video and foto.content_type not in TIPOS_IMAGEM:
             continue
         conteudo = foto.file.read()
-        if not conteudo or len(conteudo) > 25 * 1024 * 1024:
+        limite = LIMITE_VIDEO if eh_video else LIMITE_IMAGEM
+        if not conteudo or len(conteudo) > limite:
             continue
         foto_id = uuid.uuid4().hex
-        extensao = _extensao_por_mime(foto.content_type, ".jpg")
+        extensao = _extensao_por_mime(foto.content_type, ".mp4" if eh_video else ".jpg")
         caminho = UPLOADS_DIR / f"voo-{foto_id}{extensao}"
         caminho.write_bytes(conteudo)
+
+        # vídeo não tem EXIF/QR pra extrair — só guarda o arquivo pra registro
+        if eh_video:
+            db.adicionar_foto_voo(foto_id, voo_id, foto.filename or "video.mp4", foto.content_type,
+                                  None, None, None, None)
+            salvas += 1
+            continue
+
         try:
             meta = dados_foto_voo(caminho)
         except Exception:

@@ -20,7 +20,7 @@ export default function VooDetalhe() {
   const [subindo, setSubindo] = useState(false);
   const [aviso, setAviso] = useState("");
   const [erro, setErro] = useState("");
-  const [scanPreviews, setScanPreviews] = useState<string[]>([]);
+  const [scanPreviews, setScanPreviews] = useState<{ url: string; video: boolean }[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const carregar = useCallback(async () => {
@@ -62,8 +62,8 @@ export default function VooDetalhe() {
   async function upload(files: FileList | null) {
     if (!files?.length) return;
     const arr = Array.from(files);
-    const urls = arr.slice(0, 6).map((f) => URL.createObjectURL(f));
-    setScanPreviews(urls);
+    const previews = arr.slice(0, 6).map((f) => ({ url: URL.createObjectURL(f), video: f.type.startsWith("video/") }));
+    setScanPreviews(previews);
     try {
       setSubindo(true); setErro(""); setAviso("");
       const r = await enviarFotosVoo(id, arr);
@@ -79,7 +79,7 @@ export default function VooDetalhe() {
     } catch (e) { setErro(e instanceof Error ? e.message : "Falha no upload."); }
     finally {
       setSubindo(false);
-      setTimeout(() => { urls.forEach((u) => URL.revokeObjectURL(u)); setScanPreviews([]); }, 600);
+      setTimeout(() => { previews.forEach((p) => URL.revokeObjectURL(p.url)); setScanPreviews([]); }, 600);
     }
   }
 
@@ -137,20 +137,25 @@ export default function VooDetalhe() {
 
         <div className="space-y-4">
           <Card className="p-5">
-            <h2 className="flex items-center gap-2 font-semibold text-slate-800"><Upload size={16} className="text-primary" /> Fotos do voo</h2>
+            <h2 className="flex items-center gap-2 font-semibold text-slate-800"><Upload size={16} className="text-primary" /> Fotos e vídeos do voo</h2>
             <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 p-6 text-sm text-slate-500 hover:border-primary hover:text-primary">
               <ImagePlus size={18} />
-              {subindo ? "Lendo os QRs…" : "Selecionar fotos do voo (várias)"}
-              <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" multiple className="hidden" onChange={(e) => upload(e.target.files)} />
+              {subindo ? "Lendo os QRs…" : "Selecionar fotos e vídeos do voo (vários)"}
+              <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime" multiple className="hidden" onChange={(e) => upload(e.target.files)} />
             </label>
+            <p className="mt-1.5 text-xs text-slate-400">O QR só é lido nas fotos. Os vídeos ficam guardados junto, como registro do voo.</p>
 
             {scanPreviews.length > 0 && (
               <div className="mt-3">
                 <div className="grid grid-cols-3 gap-2">
-                  {scanPreviews.map((u, i) => (
+                  {scanPreviews.map((p, i) => (
                     <div key={i} className={`aspect-square rounded-lg border border-sky-300 bg-slate-900 ${subindo ? "qr-scanning" : ""}`}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={u} alt="" className="h-full w-full rounded-lg object-cover opacity-90" />
+                      {p.video ? (
+                        <video src={p.url} muted preload="metadata" className="h-full w-full rounded-lg object-cover opacity-90" />
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={p.url} alt="" className="h-full w-full rounded-lg object-cover opacity-90" />
+                      )}
                     </div>
                   ))}
                 </div>
@@ -208,18 +213,25 @@ export default function VooDetalhe() {
 
       {(voo.fotos ?? []).length > 0 && (
         <Card className="mt-5 p-5">
-          <h2 className="font-semibold text-slate-800">Fotos ({voo.fotos!.length})</h2>
+          <h2 className="font-semibold text-slate-800">Fotos e vídeos ({voo.fotos!.length})</h2>
           <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-6">
-            {voo.fotos!.map((f) => (
+            {voo.fotos!.map((f) => {
+              const eVideo = (f.mime ?? "").startsWith("video/");
+              return (
               <div key={f.id} className="overflow-hidden rounded-lg border border-slate-200">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={fotoVooUrl(id, f.id)} alt={f.nome_arquivo} className="h-28 w-full object-cover" />
+                {eVideo ? (
+                  <video src={fotoVooUrl(id, f.id)} controls preload="metadata" className="h-28 w-full bg-slate-900 object-cover" />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={fotoVooUrl(id, f.id)} alt={f.nome_arquivo} className="h-28 w-full object-cover" />
+                )}
                 <div className="flex items-center justify-between gap-1 p-1.5 text-[11px] text-slate-500">
-                  <span className="truncate">{f.gps_lat != null ? "📍 GPS" : "sem GPS"}</span>
-                  {f.gps_lat != null && <button onClick={() => usarGps(f.gps_lat!, f.gps_lon!)} className="shrink-0 rounded bg-indigo-50 px-1.5 py-0.5 text-primary hover:bg-indigo-100">usar aqui</button>}
+                  <span className="truncate">{eVideo ? "🎬 vídeo" : f.gps_lat != null ? "📍 GPS" : "sem GPS"}</span>
+                  {!eVideo && f.gps_lat != null && <button onClick={() => usarGps(f.gps_lat!, f.gps_lon!)} className="shrink-0 rounded bg-indigo-50 px-1.5 py-0.5 text-primary hover:bg-indigo-100">usar aqui</button>}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
           <p className="mt-2 text-xs text-slate-400">&quot;usar aqui&quot; marca a máquina selecionada na posição GPS daquela foto.</p>
         </Card>
