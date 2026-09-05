@@ -1269,6 +1269,50 @@ def _dist_m(lat1, lon1, lat2, lon2) -> float:
     return 2 * _R_TERRA * math.asin(min(1.0, math.sqrt(a)))
 
 
+_RAIO_MESMA_AREA_M = 60.0  # fotos com GPS a menos disso = mesma área da obra
+
+
+def _contagem_automatica_pessoas(fotos: list[dict]) -> dict[str, int]:
+    """
+    Contagem automática de pessoas por cor de capacete, deduplicando fotos
+    que cobrem a mesma área.
+
+    Fotos com GPS próximo (< 60 m) são consideradas a MESMA área — usa a
+    maior contagem entre elas (a mesma pessoa aparece em várias, não pode
+    somar). Fotos distantes = áreas diferentes = soma. Fotos sem GPS são
+    tratadas como uma única área (conservador, pra não inflar).
+    """
+    clusters: list[dict] = []
+    sem_gps: list[dict] = []
+    for f in fotos:
+        try:
+            cont = json.loads(f.get("pessoas_json") or "{}")
+        except (TypeError, ValueError):
+            cont = {}
+        if not cont:
+            continue
+        lat, lon = f.get("gps_lat"), f.get("gps_lon")
+        if lat is None or lon is None:
+            sem_gps.append(cont)
+            continue
+        alvo = next((c for c in clusters if _dist_m(lat, lon, c["lat"], c["lon"]) <= _RAIO_MESMA_AREA_M), None)
+        if alvo is None:
+            clusters.append({"lat": lat, "lon": lon, "contagens": [cont]})
+        else:
+            alvo["contagens"].append(cont)
+
+    grupos = [c["contagens"] for c in clusters]
+    if sem_gps:
+        grupos.append(sem_gps)
+
+    total: dict[str, int] = {}
+    for contagens in grupos:
+        cores: set[str] = set().union(*(c.keys() for c in contagens)) if contagens else set()
+        for cor in cores:
+            total[cor] = total.get(cor, 0) + max(c.get(cor, 0) for c in contagens)
+    return total
+
+
 def _linha_da_frente(geojson) -> list[tuple[float, float]]:
     """Extrai a lista de (lon, lat) de um GeoJSON LineString (ou Feature com LineString)."""
     if not geojson:
@@ -1457,22 +1501,17 @@ def obter_voo(voo_id: str):
         foto = por_id.get(d.get("foto_id"))
         d["foto_tirada_em"] = foto["tirada_em"] if foto else None
         deteccoes.append(d)
-    # contagem estimada de pessoas por cor de capacete. Cada foto traz a sua
-    # contagem em `pessoas`; a soma do voo só considera as fotos que o
-    # usuário marcou como "entra na contagem" (contar_pessoas = 1), pra ele
-    # controlar a sobreposição: obra pequena = 1 foto marcada; obra grande =
-    # várias fotos de áreas diferentes, sem repetir gente.
-    pessoas: dict[str, int] = {}
+    # contagem estimada de pessoas por cor de capacete, automática: soma as
+    # áreas distintas da obra e deduplica as fotos que pegam o mesmo pedaço
+    # (ver _contagem_automatica_pessoas). Cada foto também traz a sua própria
+    # contagem em `pessoas`, só pra referência.
     for f in fotos:
         try:
-            parcial = json.loads(f.get("pessoas_json") or "{}")
+            f["pessoas"] = json.loads(f.get("pessoas_json") or "{}")
         except (TypeError, ValueError):
-            parcial = {}
-        f["pessoas"] = parcial
-        if f.get("contar_pessoas"):
-            for cor, qtd in parcial.items():
-                pessoas[cor] = pessoas.get(cor, 0) + qtd
+            f["pessoas"] = {}
 
+    pessoas = _contagem_automatica_pessoas(fotos)
     resultado["fotos"] = fotos
     resultado["deteccoes"] = deteccoes
     resultado["pessoas_por_cor"] = pessoas
