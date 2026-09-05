@@ -8,8 +8,8 @@ import { Card } from "@/components/ui/card";
 import { Mapa } from "@/components/eng/mapa";
 import {
   atualizarDeteccao, enviarFotosVoo, excluirDeteccao, fotoVooUrl,
-  getRecursosEng, getVoo,
-  type Deteccao, type RecursoEng, type Voo,
+  getRecursosEng, getVoo, marcarFotoContagem,
+  type Deteccao, type RecursoEng, type Voo, type VooFoto,
 } from "@/lib/api";
 
 export default function VooDetalhe() {
@@ -105,6 +105,15 @@ export default function VooDetalhe() {
   async function removerDet(d: Deteccao) {
     await excluirDeteccao(d.id); await carregar();
   }
+
+  async function alternarContagem(f: VooFoto) {
+    try {
+      await marcarFotoContagem(id, f.id, !f.contar_pessoas);
+      await carregar();
+    } catch (e) { setErro(e instanceof Error ? e.message : "Não foi possível atualizar a contagem."); }
+  }
+
+  const temContagemPessoas = (voo?.fotos ?? []).some((f) => f.pessoas && Object.keys(f.pessoas).length > 0);
 
   if (!voo) return <div className="mx-auto max-w-[100rem] text-sm text-slate-400">Carregando…{erro && <span className="text-red-600"> — {erro}</span>}</div>;
 
@@ -209,20 +218,26 @@ export default function VooDetalhe() {
             )}
           </Card>
 
-          {!!voo.pessoas_total_estimado && (
+          {temContagemPessoas && (
             <Card className="p-5 ring-1 ring-amber-200">
               <h2 className="flex items-center gap-2 font-semibold text-slate-800">Pessoas em obra <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">experimental</span></h2>
               <p className="mt-1 text-xs text-slate-500">
-                Detecção automática por cor de capacete — ainda não calibrada com fotos reais da obra. Números abaixo
-                podem estar bem errados (telhado, calçada e veículos claros também entram na contagem). Não use pra
-                decisão ainda; sirva de referência até ajustarmos com fotos de voo de verdade.
+                Detecção por cor de capacete — <b>ainda não calibrada</b> com fotos reais (telhado, calçada e veículos
+                claros entram na conta). Marque abaixo, na galeria, <b>quais fotos entram na contagem</b>: obra pequena
+                = 1 foto que pega tudo; obra grande = várias fotos de áreas diferentes, sem repetir gente.
               </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {Object.entries(voo.pessoas_por_cor ?? {}).map(([cor, qtd]) => (
-                  <span key={cor} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">{cor}: {qtd}</span>
-                ))}
-              </div>
-              <p className="mt-3 text-2xl font-semibold text-slate-900">~{voo.pessoas_total_estimado} (não confiável ainda)</p>
+              {voo.pessoas_total_estimado ? (
+                <>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {Object.entries(voo.pessoas_por_cor ?? {}).map(([cor, qtd]) => (
+                      <span key={cor} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">{cor}: {qtd}</span>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-2xl font-semibold text-slate-900">~{voo.pessoas_total_estimado} <span className="text-sm font-normal text-slate-400">(estimativa não confiável ainda)</span></p>
+                </>
+              ) : (
+                <p className="mt-3 text-sm text-amber-700">Nenhuma foto marcada pra contagem ainda — marque na galeria abaixo.</p>
+              )}
             </Card>
           )}
         </div>
@@ -234,8 +249,9 @@ export default function VooDetalhe() {
           <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-6">
             {voo.fotos!.map((f) => {
               const eVideo = (f.mime ?? "").startsWith("video/");
+              const pessoasFoto = f.pessoas && Object.keys(f.pessoas).length > 0 ? f.pessoas : null;
               return (
-              <div key={f.id} className="overflow-hidden rounded-lg border border-slate-200">
+              <div key={f.id} className={`overflow-hidden rounded-lg border ${f.contar_pessoas ? "border-emerald-400" : "border-slate-200"}`}>
                 {eVideo ? (
                   <video src={fotoVooUrl(id, f.id)} controls preload="metadata" className="h-28 w-full bg-slate-900 object-cover" />
                 ) : (
@@ -246,6 +262,15 @@ export default function VooDetalhe() {
                   <span className="truncate">{eVideo ? "🎬 vídeo" : f.gps_lat != null ? "📍 GPS" : "sem GPS"}</span>
                   {!eVideo && f.gps_lat != null && <button onClick={() => usarGps(f.gps_lat!, f.gps_lon!)} className="shrink-0 rounded bg-indigo-50 px-1.5 py-0.5 text-primary hover:bg-indigo-100">usar aqui</button>}
                 </div>
+                {pessoasFoto && (
+                  <button
+                    onClick={() => alternarContagem(f)}
+                    className={`flex w-full items-center gap-1.5 border-t px-1.5 py-1 text-left text-[11px] ${f.contar_pessoas ? "border-emerald-100 bg-emerald-50 text-emerald-700" : "border-slate-100 text-slate-500 hover:bg-slate-50"}`}
+                  >
+                    <span className={`inline-block size-3 shrink-0 rounded-sm border ${f.contar_pessoas ? "border-emerald-500 bg-emerald-500" : "border-slate-300"}`} />
+                    <span className="truncate">contar ({Object.entries(pessoasFoto).map(([c, q]) => `${q} ${c.toLowerCase()}`).join(", ")})</span>
+                  </button>
+                )}
               </div>
               );
             })}

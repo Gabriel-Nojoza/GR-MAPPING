@@ -273,7 +273,8 @@ def init_db() -> None:
                 altitude_m REAL,
                 tirada_em TEXT,
                 tem_qr INTEGER NOT NULL DEFAULT 0,
-                pessoas_json TEXT
+                pessoas_json TEXT,
+                contar_pessoas INTEGER NOT NULL DEFAULT 0
             )
         """)
         conn.execute("""
@@ -405,6 +406,8 @@ def init_db() -> None:
             colunas_voo_fotos = {r["name"] for r in conn.execute("PRAGMA table_info(eng_voo_fotos)")}
         if colunas_voo_fotos and "pessoas_json" not in colunas_voo_fotos:
             conn.execute("ALTER TABLE eng_voo_fotos ADD COLUMN pessoas_json TEXT")
+        if colunas_voo_fotos and "contar_pessoas" not in colunas_voo_fotos:
+            conn.execute("ALTER TABLE eng_voo_fotos ADD COLUMN contar_pessoas INTEGER NOT NULL DEFAULT 0")
 
         if DATABASE_URL:
             colunas_usuarios = {r["column_name"] for r in conn.execute(
@@ -1335,6 +1338,16 @@ def marcar_foto_pessoas(id_: str, pessoas_json: str) -> None:
     """Grava a contagem estimada de pessoas por cor de capacete daquela foto."""
     with _conectar() as conn:
         conn.execute("UPDATE eng_voo_fotos SET pessoas_json = ? WHERE id = ?", (pessoas_json, id_))
+
+
+def definir_foto_contagem(id_: str, incluir: bool) -> bool:
+    """Marca/desmarca se a foto entra na contagem oficial de pessoas do voo."""
+    with _conectar() as conn:
+        cur = conn.execute(
+            "UPDATE eng_voo_fotos SET contar_pessoas = ? WHERE id = ?",
+            (1 if incluir else 0, id_),
+        )
+        return cur.rowcount > 0
 
 
 def criar_deteccao(id_: str, voo_id: str, foto_id: str | None, maquina_id: str,

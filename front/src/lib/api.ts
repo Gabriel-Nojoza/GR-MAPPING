@@ -282,7 +282,7 @@ export type Voo = {
   fotos?: VooFoto[]; deteccoes?: Deteccao[];
   pessoas_por_cor?: Record<string, number>; pessoas_total_estimado?: number;
 };
-export type VooFoto = { id: string; nome_arquivo: string; mime?: string | null; gps_lat: number | null; gps_lon: number | null; altitude_m: number | null; tirada_em: string | null; tem_qr: number };
+export type VooFoto = { id: string; nome_arquivo: string; mime?: string | null; gps_lat: number | null; gps_lon: number | null; altitude_m: number | null; tirada_em: string | null; tem_qr: number; contar_pessoas?: number; pessoas?: Record<string, number> | null };
 export type Deteccao = { id: string; voo_id: string; foto_id: string | null; maquina_id: string; frente_id: string | null; lat: number | null; lon: number | null; progressiva_m: number | null; metodo: string; status_maquina: string | null; foto_tirada_em?: string | null };
 export type Comparacao = {
   voo_a: Voo; voo_b: Voo;
@@ -316,6 +316,7 @@ export async function getEngDashboard() { return financeiroResposta(await fetch(
 export async function excluirVoo(id: string) { return financeiroResposta(await fetch(`${API_URL}/eng/voos/${id}`, { method: "DELETE" })); }
 export async function enviarFotosVoo(id: string, fotos: File[]) { const form = new FormData(); fotos.forEach((f) => form.append("fotos", f)); const token = sessionStorage.getItem("medicao-terreno:token"); return financeiroResposta(await fetch(`${API_URL}/eng/voos/${id}/fotos`, { method: "POST", headers: { Authorization: `Bearer ${token ?? ""}` }, body: form })) as Promise<{ ok: boolean; adicionadas: number; qrs_lidos: number; leitor_ativo: boolean }>; }
 export function fotoVooUrl(vooId: string, fotoId: string) { return `${API_URL}/eng/voos/${vooId}/fotos/${fotoId}/imagem`; }
+export async function marcarFotoContagem(vooId: string, fotoId: string, incluir: boolean) { return financeiroResposta(await fetch(`${API_URL}/eng/voos/${vooId}/fotos/${fotoId}/contagem`, { method: "PATCH", headers: authHeaders(), body: JSON.stringify({ incluir }) })); }
 export async function criarDeteccao(vooId: string, d: { maquina_id: string; foto_id?: string; frente_id?: string; lat?: number; lon?: number; status_maquina?: string }) { return financeiroResposta(await fetch(`${API_URL}/eng/voos/${vooId}/deteccoes`, { method: "POST", headers: authHeaders(), body: JSON.stringify(d) })) as Promise<Deteccao>; }
 export async function atualizarDeteccao(id: string, d: { maquina_id: string; frente_id?: string; lat?: number; lon?: number; status_maquina?: string }) { return financeiroResposta(await fetch(`${API_URL}/eng/deteccoes/${id}`, { method: "PATCH", headers: authHeaders(), body: JSON.stringify(d) })); }
 export async function excluirDeteccao(id: string) { return financeiroResposta(await fetch(`${API_URL}/eng/deteccoes/${id}`, { method: "DELETE" })); }

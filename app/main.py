@@ -1457,19 +1457,24 @@ def obter_voo(voo_id: str):
         foto = por_id.get(d.get("foto_id"))
         d["foto_tirada_em"] = foto["tirada_em"] if foto else None
         deteccoes.append(d)
-    resultado["fotos"] = fotos
-    resultado["deteccoes"] = deteccoes
-
-    # soma a contagem estimada de pessoas (por cor de capacete) de todas as
-    # fotos do voo — é uma estimativa por foto, não uma pessoa única rastreada
+    # contagem estimada de pessoas por cor de capacete. Cada foto traz a sua
+    # contagem em `pessoas`; a soma do voo só considera as fotos que o
+    # usuário marcou como "entra na contagem" (contar_pessoas = 1), pra ele
+    # controlar a sobreposição: obra pequena = 1 foto marcada; obra grande =
+    # várias fotos de áreas diferentes, sem repetir gente.
     pessoas: dict[str, int] = {}
     for f in fotos:
         try:
             parcial = json.loads(f.get("pessoas_json") or "{}")
         except (TypeError, ValueError):
             parcial = {}
-        for cor, qtd in parcial.items():
-            pessoas[cor] = pessoas.get(cor, 0) + qtd
+        f["pessoas"] = parcial
+        if f.get("contar_pessoas"):
+            for cor, qtd in parcial.items():
+                pessoas[cor] = pessoas.get(cor, 0) + qtd
+
+    resultado["fotos"] = fotos
+    resultado["deteccoes"] = deteccoes
     resultado["pessoas_por_cor"] = pessoas
     resultado["pessoas_total_estimado"] = sum(pessoas.values())
     return resultado
@@ -1559,6 +1564,19 @@ def enviar_fotos_voo(voo_id: str, fotos: list[UploadFile] = File(...),
             db.marcar_foto_pessoas(foto_id, json.dumps(contagem, ensure_ascii=False))
 
     return {"ok": True, "adicionadas": salvas, "qrs_lidos": qrs_lidos, "leitor_ativo": leitor_qr.disponivel()}
+
+
+class FotoContagemDados(BaseModel):
+    incluir: bool
+
+
+@app.patch("/eng/voos/{voo_id}/fotos/{foto_id}/contagem")
+def definir_contagem_foto(voo_id: str, foto_id: str, dados: FotoContagemDados,
+                          contexto: dict | None = Depends(contexto_usuario)):
+    """Marca/desmarca se essa foto entra na contagem de pessoas do voo."""
+    if not db.definir_foto_contagem(foto_id, dados.incluir):
+        raise HTTPException(status_code=404, detail="foto não encontrada")
+    return {"ok": True}
 
 
 @app.get("/eng/voos/{voo_id}/fotos/{foto_id}/imagem")
