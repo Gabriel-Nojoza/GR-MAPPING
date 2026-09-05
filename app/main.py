@@ -1519,6 +1519,48 @@ def obter_voo(voo_id: str):
     return resultado
 
 
+@app.get("/eng/pessoas-em-obra")
+def pessoas_em_obra(contexto: dict | None = Depends(contexto_usuario)):
+    """
+    Quantas pessoas o drone viu em cada obra, pelo voo mais recente daquela
+    obra. Alimenta o painel da tela de Trabalhadores.
+    """
+    empresa_id = _empresa_do_contexto(contexto)
+    obra_nome = {o["id"]: o["nome"] for o in db.listar_recursos_eng(empresa_id, "obra")}
+    trab_por_obra: dict[str, int] = {}
+    for t in db.listar_recursos_eng(empresa_id, "trabalhador"):
+        try:
+            dados = json.loads(t["dados_json"]) if t["dados_json"] else {}
+        except (TypeError, ValueError):
+            dados = {}
+        obra = dados.get("obra")
+        if obra:
+            trab_por_obra[obra] = trab_por_obra.get(obra, 0) + 1
+
+    # listar_voos já vem ordenado por data desc — o primeiro de cada obra é o mais recente
+    ultimo_por_obra: dict[str, dict] = {}
+    for v in db.listar_voos(empresa_id, None):
+        ultimo_por_obra.setdefault(v["obra_id"], dict(v))
+
+    saida = []
+    for obra_id, v in ultimo_por_obra.items():
+        fotos = [dict(f) for f in db.listar_fotos_voo(v["id"])]
+        pessoas = _contagem_automatica_pessoas(fotos)
+        if not pessoas:
+            continue
+        saida.append({
+            "obra_id": obra_id,
+            "obra_nome": obra_nome.get(obra_id, "Obra"),
+            "voo_id": v["id"],
+            "data": v["data"],
+            "turno": v["turno"],
+            "pessoas_por_cor": pessoas,
+            "total_estimado": sum(pessoas.values()),
+            "cadastrados": trab_por_obra.get(obra_id, 0),
+        })
+    return saida
+
+
 @app.delete("/eng/voos/{voo_id}")
 def excluir_voo(voo_id: str):
     for f in db.listar_fotos_voo(voo_id):
