@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
-import { Building2, HardHat, LayoutDashboard, Menu, Plane, Ruler, TrendingUp, Users, UserRound } from "lucide-react";
+import { Building2, HardHat, LayoutDashboard, Plane, Ruler, TrendingUp, Users, UserRound } from "lucide-react";
 import { Sidebar } from "@/components/sidebar/sidebar";
 import { AdminSidebar } from "@/components/sidebar/admin-sidebar";
 import { EngenhariaSidebar } from "@/components/sidebar/engenharia-sidebar";
@@ -101,12 +101,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       )}
 
       <div className="flex flex-1 flex-col overflow-hidden">
-        {/* topo do celular: logo + atalho de menu */}
-        <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-2.5 lg:hidden">
+        {/* topo do celular: só a logo (navegação fica na barra de baixo) */}
+        <div className="flex items-center border-b border-slate-200 bg-white px-4 py-2.5 lg:hidden">
           <Image src="/logo.png" alt="GR Mapping" width={96} height={28} className="h-7 w-auto object-contain" />
-          <button type="button" onClick={() => setMenuAberto(true)} aria-label="Abrir menu" className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100">
-            <Menu size={20} />
-          </button>
         </div>
 
         <main className="flex-1 overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8 lg:pb-8">
