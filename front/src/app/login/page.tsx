@@ -60,12 +60,17 @@ export default function LoginPage() {
 
   return (
     <div className="relative min-h-screen bg-[#0a1424]">
-      {/* fundo fixo: cobre a viewport em qualquer zoom */}
+      {/* fundo fixo: mobile.png no celular, capa.png no desktop */}
       <div
-        className="fixed inset-0 bg-[#0a1424] bg-cover bg-center"
+        className="fixed inset-0 bg-[#0a1424] bg-cover bg-center sm:hidden"
+        style={{ backgroundImage: "url(/mobile.png)" }}
+      />
+      <div
+        className="fixed inset-0 hidden bg-[#0a1424] bg-cover bg-center sm:block"
         style={{ backgroundImage: "url(/capa.png)" }}
       />
-      <div className="pointer-events-none fixed inset-0 bg-gradient-to-l from-[#0a1424] via-[#0a1424]/75 to-transparent" />
+      <div className="pointer-events-none fixed inset-0 bg-[#0a1424]/55 sm:hidden" />
+      <div className="pointer-events-none fixed inset-0 hidden bg-gradient-to-l from-[#0a1424] via-[#0a1424]/75 to-transparent sm:block" />
 
       {/* conteúdo: rola quando o zoom deixa o form maior que a tela */}
       <div className="relative flex min-h-screen items-center justify-center px-6 py-16 sm:justify-end sm:px-12 lg:px-28">

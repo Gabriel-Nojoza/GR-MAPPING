@@ -18,7 +18,7 @@ export function SidebarHeader({ children }: { children: ReactNode }) {
 }
 
 export function SidebarNav({ children }: { children: ReactNode }) {
-  return <nav className="flex flex-1 flex-col gap-1 px-3 py-5">{children}</nav>;
+  return <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-5">{children}</nav>;
 }
 
 export function SidebarItem({

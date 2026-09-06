@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Building2, UserRound } from "lucide-react";
+import Image from "next/image";
+import { Building2, Menu, UserRound } from "lucide-react";
 import { Sidebar } from "@/components/sidebar/sidebar";
 import { AdminSidebar } from "@/components/sidebar/admin-sidebar";
 import { EngenhariaSidebar } from "@/components/sidebar/engenharia-sidebar";
@@ -21,6 +22,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [verified, setVerified] = useState(false);
   const [usuario, setUsuario] = useState<Usuario | null>(null);
+  const [menuAberto, setMenuAberto] = useState(false);
   const isLogin = pathname === "/login";
   const isAdmin = pathname.startsWith("/admin");
   const isEngenhariaRota = rotaEhEngenharia(pathname);
@@ -52,6 +54,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setVerified(true);
   }, [isAdmin, isEngenhariaRota, isLogin, router]);
 
+  // fecha o menu do celular ao trocar de página
+  useEffect(() => { setMenuAberto(false); }, [pathname]);
+
   if (isLogin) {
     return <main className="min-h-screen">{children}</main>;
   }
@@ -68,11 +73,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      {barraLateral}
-      <main className="flex-1 overflow-y-auto p-8">
-        {!isAdmin && usuario && <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm"><div className="flex items-center gap-3"><span className="grid size-9 place-items-center rounded-lg bg-indigo-50 text-primary"><Building2 size={18} /></span><div><p className="text-xs text-slate-500">{rotuloEmpresa}</p><p className="text-sm font-semibold text-slate-800">{usuario.empresa_nome ?? "Empresa não vinculada"}</p></div></div><div className="flex items-center gap-2 border-l border-slate-100 pl-4"><UserRound size={16} className="text-slate-400" /><div><p className="text-xs text-slate-500">Usuário conectado</p><p className="text-sm font-medium text-slate-700">{usuario.nome || usuario.email}</p></div></div></div>}
-        {children}
-      </main>
+      {/* barra lateral: gaveta no celular, fixa no desktop */}
+      <div
+        className={`fixed inset-y-0 left-0 z-40 transition-transform duration-200 lg:static lg:z-auto lg:translate-x-0 ${
+          menuAberto ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        {barraLateral}
+      </div>
+      {menuAberto && (
+        <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setMenuAberto(false)} />
+      )}
+
+      <div className="flex flex-1 flex-col overflow-hidden">
+        {/* topo do celular com botão de menu */}
+        <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-2.5 lg:hidden">
+          <button type="button" onClick={() => setMenuAberto(true)} aria-label="Abrir menu" className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100">
+            <Menu size={22} />
+          </button>
+          <Image src="/logo.png" alt="GR Mapping" width={96} height={28} className="h-7 w-auto object-contain" />
+        </div>
+
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+          {!isAdmin && usuario && <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm"><div className="flex items-center gap-3"><span className="grid size-9 place-items-center rounded-lg bg-indigo-50 text-primary"><Building2 size={18} /></span><div><p className="text-xs text-slate-500">{rotuloEmpresa}</p><p className="text-sm font-semibold text-slate-800">{usuario.empresa_nome ?? "Empresa não vinculada"}</p></div></div><div className="flex items-center gap-2 border-l border-slate-100 pl-4"><UserRound size={16} className="text-slate-400" /><div><p className="text-xs text-slate-500">Usuário conectado</p><p className="text-sm font-medium text-slate-700">{usuario.nome || usuario.email}</p></div></div></div>}
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
