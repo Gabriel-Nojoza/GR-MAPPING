@@ -72,13 +72,14 @@ export default function LoginPage() {
       <div className="pointer-events-none fixed inset-0 bg-[#0a1424]/55 sm:hidden" />
       <div className="pointer-events-none fixed inset-0 hidden bg-gradient-to-l from-[#0a1424] via-[#0a1424]/75 to-transparent sm:block" />
 
-      {/* conteúdo: rola quando o zoom deixa o form maior que a tela */}
-      <div className="relative flex min-h-screen items-center justify-center px-6 py-16 sm:justify-end sm:px-12 lg:px-28">
+      {/* conteúdo: no celular fica na parte de baixo (livre da logo do fundo);
+          no desktop, centralizado à direita */}
+      <div className="relative flex min-h-screen items-start justify-center px-6 pb-14 pt-[34vh] sm:items-center sm:justify-end sm:px-12 sm:py-16 sm:pt-16 lg:px-28">
         <div className="w-[24rem] max-w-full">
-          <h1 className="text-3xl font-bold tracking-tight text-white">Entrar no sistema</h1>
-          <p className="mt-2 text-sm text-white/55">Use o usuário cadastrado.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Entrar no sistema</h1>
+          <p className="mt-1.5 text-sm text-white/55 sm:mt-2">Use o usuário cadastrado.</p>
 
-          <form className="mt-8 space-y-7" onSubmit={handleSubmit} noValidate>
+          <form className="mt-5 space-y-5 sm:mt-8 sm:space-y-7" onSubmit={handleSubmit} noValidate>
             <label className="block">
               <span className="mb-1 block text-sm text-white/70">E-mail</span>
               <input name="email" type="email" autoComplete="email" placeholder="voce@email.com" className={campo} />
@@ -110,13 +111,13 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full border border-white/40 py-3.5 text-sm font-semibold uppercase tracking-[0.22em] text-white transition hover:bg-white hover:text-[#0a1424] disabled:cursor-wait disabled:opacity-60"
+              className="w-full border border-white/40 py-3 text-sm font-semibold uppercase tracking-[0.22em] text-white transition hover:bg-white hover:text-[#0a1424] disabled:cursor-wait disabled:opacity-60 sm:py-3.5"
             >
               {loading ? "Entrando…" : "Entrar"}
             </button>
           </form>
 
-          <p className="mt-10 text-xs text-white/35">© {new Date().getFullYear()} GR Mapping</p>
+          <p className="mt-6 text-xs text-white/35 sm:mt-10">© {new Date().getFullYear()} GR Mapping</p>
         </div>
       </div>
     </div>
