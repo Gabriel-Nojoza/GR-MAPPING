@@ -27,8 +27,8 @@ export function PainelPessoasObra() {
         <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">experimental</span>
       </div>
       <p className="mt-1 text-xs text-slate-400">
-        Contagem automática por cor de capacete no voo mais recente de cada obra. Ainda não calibrada — use como
-        conferência com o ponto, não como número oficial.
+        A IA conta as pessoas no voo mais recente de cada obra e classifica pela cor do capacete. É estimativa —
+        use como conferência com o ponto eletrônico, não como número oficial.
       </p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {lista.map((p) => (

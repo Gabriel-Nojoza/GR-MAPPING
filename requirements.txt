@@ -11,3 +11,5 @@ psycopg-pool
 PyJWT
 opencv-contrib-python-headless
 numpy
+ultralytics
+polars

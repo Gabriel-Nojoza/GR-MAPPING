@@ -215,16 +215,17 @@ export default function VooDetalhe() {
             <Card className="p-5 ring-1 ring-amber-200">
               <h2 className="flex items-center gap-2 font-semibold text-slate-800">Pessoas em obra <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">experimental</span></h2>
               <p className="mt-1 text-xs text-slate-500">
-                Contagem automática por cor de capacete. Fotos com GPS próximo são tratadas como a mesma área da obra
-                (usa a maior contagem, não soma) e áreas diferentes são somadas. <b>Ainda não calibrada</b> com fotos
-                reais — telhado, calçada e veículos claros ainda entram na conta, use só como referência.
+                A IA acha as pessoas na foto e classifica pela cor do capacete. Fotos com GPS próximo contam como a
+                mesma área da obra (usa a maior contagem, não soma); áreas diferentes são somadas. Em voo alto a
+                pessoa fica pequena e a IA erra mais — <b>voar mais baixo</b> nessa foto ajuda. Use como conferência
+                com o ponto, não como número oficial.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {Object.entries(voo.pessoas_por_cor ?? {}).map(([cor, qtd]) => (
                   <span key={cor} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">{cor}: {qtd}</span>
                 ))}
               </div>
-              <p className="mt-3 text-2xl font-semibold text-slate-900">~{voo.pessoas_total_estimado} <span className="text-sm font-normal text-slate-400">(estimativa não confiável ainda)</span></p>
+              <p className="mt-3 text-2xl font-semibold text-slate-900">~{voo.pessoas_total_estimado} <span className="text-sm font-normal text-slate-400">pessoa(s) — estimativa</span></p>
             </Card>
           )}
         </div>

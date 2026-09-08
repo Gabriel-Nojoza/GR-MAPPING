@@ -38,7 +38,7 @@ load_dotenv()  # lê o .env local (GEMINI_API_KEY) antes de qualquer coisa
 from app import db, ramos
 from app.metadata import read_photo_metadata, PhotoMetadata, dados_foto_voo
 from app import qr as leitor_qr
-from app import pessoas as contador_pessoas
+from app import deteccao_pessoas as detector_pessoas
 from app.gsd import compute_gsd
 from app.area import area_do_poligono
 from app.ia_projeto import (
@@ -1636,14 +1636,11 @@ def enviar_fotos_voo(voo_id: str, fotos: list[UploadFile] = File(...),
             ja_detectadas.add(mid)
             qrs_lidos += 1
 
-        # contagem estimada de pessoas por cor de capacete (best-effort).
-        # DESLIGADA por padrão: sem calibração com fotos reais de gente de
-        # capacete, ela confunde QR branco / céu / veículo claro com pessoa
-        # e devolve dezenas de "pessoas" numa foto que não tem ninguém.
-        # Ligar só quando for calibrar: CONTAGEM_PESSOAS_ATIVA=1
-        if os.getenv("CONTAGEM_PESSOAS_ATIVA", "").strip() in {"1", "true", "sim"}:
+        # contagem de pessoas por cor de capacete via YOLO (best-effort).
+        # Pode desligar com CONTAGEM_PESSOAS=off (ex.: pra acelerar upload).
+        if os.getenv("CONTAGEM_PESSOAS", "on").strip().lower() != "off":
             try:
-                contagem = contador_pessoas.contar_capacetes(caminho)
+                contagem = detector_pessoas.contar_pessoas(caminho)
             except Exception:
                 contagem = {}
             if contagem:

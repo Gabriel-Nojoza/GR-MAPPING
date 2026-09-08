@@ -8,3 +8,7 @@ dados.db
 uploads/
 .pytest_cache/
 *.log
+
+# modelos / amostras YOLO (baixados no build do container)
+*.pt
+bus.jpg
