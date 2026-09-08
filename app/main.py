@@ -1636,13 +1636,18 @@ def enviar_fotos_voo(voo_id: str, fotos: list[UploadFile] = File(...),
             ja_detectadas.add(mid)
             qrs_lidos += 1
 
-        # contagem estimada de pessoas por cor de capacete (best-effort)
-        try:
-            contagem = contador_pessoas.contar_capacetes(caminho)
-        except Exception:
-            contagem = {}
-        if contagem:
-            db.marcar_foto_pessoas(foto_id, json.dumps(contagem, ensure_ascii=False))
+        # contagem estimada de pessoas por cor de capacete (best-effort).
+        # DESLIGADA por padrão: sem calibração com fotos reais de gente de
+        # capacete, ela confunde QR branco / céu / veículo claro com pessoa
+        # e devolve dezenas de "pessoas" numa foto que não tem ninguém.
+        # Ligar só quando for calibrar: CONTAGEM_PESSOAS_ATIVA=1
+        if os.getenv("CONTAGEM_PESSOAS_ATIVA", "").strip() in {"1", "true", "sim"}:
+            try:
+                contagem = contador_pessoas.contar_capacetes(caminho)
+            except Exception:
+                contagem = {}
+            if contagem:
+                db.marcar_foto_pessoas(foto_id, json.dumps(contagem, ensure_ascii=False))
 
     return {"ok": True, "adicionadas": salvas, "qrs_lidos": qrs_lidos, "leitor_ativo": leitor_qr.disponivel()}
 
