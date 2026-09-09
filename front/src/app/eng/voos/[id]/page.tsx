@@ -106,6 +106,20 @@ export default function VooDetalhe() {
     await excluirDeteccao(d.id); await carregar();
   }
 
+  async function trocarMaquina(d: Deteccao, novaMaquinaId: string) {
+    if (!novaMaquinaId || novaMaquinaId === d.maquina_id) return;
+    try {
+      await atualizarDeteccao(d.id, {
+        maquina_id: novaMaquinaId,
+        lat: d.lat ?? undefined,
+        lon: d.lon ?? undefined,
+        status_maquina: d.status_maquina ?? undefined,
+      });
+      setAviso("Máquina trocada. A posição foi mantida.");
+      await carregar();
+    } catch (e) { setErro(e instanceof Error ? e.message : "Não foi possível trocar a máquina."); }
+  }
+
   const temContagemPessoas = (voo?.fotos ?? []).some((f) => f.pessoas && Object.keys(f.pessoas).length > 0);
 
   if (!voo) return <div className="mx-auto max-w-[100rem] text-sm text-slate-400">Carregando…{erro && <span className="text-red-600"> — {erro}</span>}</div>;
@@ -179,19 +193,26 @@ export default function VooDetalhe() {
           <Card className="p-0">
             <div className="border-b border-slate-100 p-4">
               <h2 className="font-semibold text-slate-800">Máquinas identificadas pelo QR</h2>
-              <p className="text-xs text-slate-500">{qrDets.length} lida(s) automaticamente</p>
+              <p className="text-xs text-slate-500">{qrDets.length} lida(s) automaticamente — se o QR estava na máquina errada, é só trocar no seletor abaixo (a posição fica)</p>
             </div>
             {qrDets.length === 0 ? (
               <p className="p-4 text-sm text-slate-400">Nenhuma ainda. Suba as fotos do voo — o QR é lido automaticamente.</p>
             ) : (
               <div className="divide-y divide-slate-50">
                 {qrDets.map((d) => (
-                  <div key={d.id} className="flex items-center justify-between gap-2 p-3 text-sm">
-                    <div className="flex items-center gap-2.5">
-                      <MapPin size={15} className={d.lat == null ? "text-amber-500" : "text-emerald-600"} />
-                      <div>
-                        <p className="font-medium text-slate-700">{maqNome.get(d.maquina_id) ?? "Máquina"}</p>
-                        <p className="text-xs text-slate-400">
+                  <div key={d.id} className="flex items-start justify-between gap-2 p-3 text-sm">
+                    <div className="flex min-w-0 flex-1 items-start gap-2.5">
+                      <MapPin size={15} className={`mt-1 shrink-0 ${d.lat == null ? "text-amber-500" : "text-emerald-600"}`} />
+                      <div className="min-w-0 flex-1">
+                        <select
+                          value={d.maquina_id}
+                          onChange={(e) => trocarMaquina(d, e.target.value)}
+                          className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-sm font-medium text-slate-700 outline-none focus:border-primary"
+                        >
+                          {!maquinas.some((m) => m.id === d.maquina_id) && <option value={d.maquina_id}>{maqNome.get(d.maquina_id) ?? "Máquina"}</option>}
+                          {maquinas.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
+                        </select>
+                        <p className="mt-1 text-xs text-slate-400">
                           {d.foto_tirada_em ? new Date(d.foto_tirada_em).toLocaleString("pt-BR") + " · " : ""}
                           {d.lat == null
                             ? <span className="text-amber-600">sem posição</span>
@@ -199,7 +220,7 @@ export default function VooDetalhe() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex shrink-0 items-center gap-1">
                       {d.lat == null && (
                         <button onClick={() => { setMaquinaSel(d.maquina_id); setAviso("Agora clique no mapa onde a máquina estava."); }} className="rounded-lg bg-indigo-50 px-2 py-1 text-xs font-medium text-primary hover:bg-indigo-100">posicionar</button>
                       )}
