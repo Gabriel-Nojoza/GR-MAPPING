@@ -90,15 +90,12 @@ export function Mapa({
         zoom: center ? zoom : ZOOM_BRASIL,
         worldCopyJump: true,
       });
-      leaflet.tileLayer(
-        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        { maxZoom: 20, attribution: "Esri" },
-      ).addTo(map);
-      // sobreposição transparente com nomes de bairros/cidades e ruas
-      leaflet.tileLayer(
-        "https://{s}.basemaps.cartocdn.com/rastertiles/light_only_labels/{z}/{x}/{y}{r}.png",
-        { maxZoom: 20, subdomains: "abcd", attribution: "&copy; OpenStreetMap, &copy; CARTO", pane: "overlayPane" },
-      ).addTo(map);
+      // satélite do Google (imagem mais atual). Uso não-oficial dos tiles —
+      // se um dia o Google bloquear, o mapa fica cinza e a gente troca a URL.
+      const gGoogle = { subdomains: ["mt0", "mt1", "mt2", "mt3"], maxZoom: 21, attribution: "&copy; Google" };
+      leaflet.tileLayer("https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}", gGoogle).addTo(map);
+      // sobreposição transparente do Google com ruas e nomes de bairro
+      leaflet.tileLayer("https://{s}.google.com/vt/lyrs=h&x={x}&y={y}&z={z}", { ...gGoogle, pane: "overlayPane" }).addTo(map);
       grupoRef.current = leaflet.layerGroup().addTo(map);
       map.on("click", (e: L.LeafletMouseEvent) => {
         const { lat, lng } = e.latlng;
