@@ -1670,17 +1670,15 @@ def enviar_fotos_voo(voo_id: str, fotos: list[UploadFile] = File(...),
             qrs_lidos += 1
 
         # contagem de pessoas por cor de capacete (best-effort).
-        # CONTAGEM_PESSOAS = gemini (padrão) | yolo | off
-        modo_contagem = os.getenv("CONTAGEM_PESSOAS", "gemini").strip().lower()
+        # CONTAGEM_PESSOAS = yolo (padrão) | gemini | off
+        modo_contagem = os.getenv("CONTAGEM_PESSOAS", "yolo").strip().lower()
         if modo_contagem != "off":
             contagem = {}
             try:
-                if modo_contagem == "yolo":
-                    contagem = detector_pessoas.contar_pessoas(caminho)
-                elif contador_gemini.disponivel():
+                if modo_contagem == "gemini" and contador_gemini.disponivel():
                     contagem = contador_gemini.contar_pessoas(caminho)
                     if not contagem and detector_pessoas.disponivel():
-                        contagem = detector_pessoas.contar_pessoas(caminho)  # reserva
+                        contagem = detector_pessoas.contar_pessoas(caminho)
                 else:
                     contagem = detector_pessoas.contar_pessoas(caminho)
             except Exception:

@@ -275,9 +275,10 @@ export default function VooDetalhe() {
             <Card className="p-5 ring-1 ring-amber-200">
               <h2 className="flex items-center gap-2 font-semibold text-slate-800">Pessoas em obra <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">experimental</span></h2>
               <p className="mt-1 text-xs text-slate-500">
-                A IA lê a foto e conta as pessoas pela cor do capacete. Fotos com GPS próximo contam como a mesma área
-                da obra (usa a maior contagem, não soma); áreas diferentes são somadas. É uma estimativa pra conferir
-                com o ponto — foto mais próxima e nítida melhora o acerto.
+                A IA acha as pessoas na foto e classifica pela cor do capacete. Fotos com GPS próximo contam como a
+                mesma área da obra (usa a maior contagem, não soma); áreas diferentes são somadas. Em voo alto a pessoa
+                fica pequena e a IA erra mais — <b>foto mais baixa/próxima</b> ajuda. Use como conferência com o ponto,
+                não como número oficial.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {Object.entries(voo.pessoas_por_cor ?? {}).map(([cor, qtd]) => (
