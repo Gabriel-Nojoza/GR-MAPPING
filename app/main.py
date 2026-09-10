@@ -1586,28 +1586,39 @@ def enviar_fotos_voo(voo_id: str, fotos: list[UploadFile] = File(...),
     ja_detectadas = {d["maquina_id"] for d in db.listar_deteccoes(voo_id) if d["metodo"] == "qr"}
 
     TIPOS_IMAGEM = {"image/jpeg", "image/png", "image/webp"}
-    TIPOS_HEIC = {"image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence"}
-    TIPOS_VIDEO = {"video/mp4", "video/quicktime"}
+    EXT_IMAGEM = (".jpg", ".jpeg", ".png", ".webp")
+    EXT_HEIC = (".heic", ".heif")
+    EXT_VIDEO = (".mp4", ".mov", ".m4v", ".avi", ".webm", ".mkv", ".3gp")
     LIMITE_IMAGEM = 40 * 1024 * 1024
     LIMITE_VIDEO = 500 * 1024 * 1024
 
-    salvas, qrs_lidos = 0, 0
+    salvas, qrs_lidos, ignorados = 0, 0, 0
     for foto in fotos:
-        eh_video = foto.content_type in TIPOS_VIDEO
-        eh_heic = foto.content_type in TIPOS_HEIC or (foto.filename or "").lower().endswith((".heic", ".heif"))
-        if not eh_video and not eh_heic and foto.content_type not in TIPOS_IMAGEM:
+        nome_lower = (foto.filename or "").lower()
+        ctype = (foto.content_type or "").lower()
+        eh_video = ctype.startswith("video/") or nome_lower.endswith(EXT_VIDEO)
+        eh_heic = ctype in {"image/heic", "image/heif"} or nome_lower.endswith(EXT_HEIC)
+        eh_imagem = ctype in TIPOS_IMAGEM or nome_lower.endswith(EXT_IMAGEM)
+        if not (eh_video or eh_heic or eh_imagem):
+            ignorados += 1
             continue
         conteudo = foto.file.read()
         limite = LIMITE_VIDEO if eh_video else LIMITE_IMAGEM
         if not conteudo or len(conteudo) > limite:
+            ignorados += 1
             continue
         foto_id = uuid.uuid4().hex
-        nome_arquivo = foto.filename or ("video.mp4" if eh_video else "foto.jpg")
-        mime_arquivo = foto.content_type or ("video/mp4" if eh_video else "image/jpeg")
-        if eh_heic and not eh_video:
+        ext_nome = os.path.splitext(nome_lower)[1]
+        nome_arquivo = foto.filename or ("video" + (ext_nome or ".mp4") if eh_video else "foto.jpg")
+        if eh_video:
+            extensao = ext_nome if ext_nome in EXT_VIDEO else ".mp4"
+            mime_arquivo = ctype if ctype.startswith("video/") else ("video/quicktime" if extensao == ".mov" else "video/mp4")
+        elif eh_heic:
             extensao = ".heic"
+            mime_arquivo = "image/heic"
         else:
-            extensao = _extensao_por_mime(mime_arquivo, ".mp4" if eh_video else ".jpg")
+            extensao = ext_nome if ext_nome in EXT_IMAGEM else ".jpg"
+            mime_arquivo = ctype if ctype in TIPOS_IMAGEM else "image/jpeg"
         caminho = UPLOADS_DIR / f"voo-{foto_id}{extensao}"
         caminho.write_bytes(conteudo)
 
@@ -1686,7 +1697,8 @@ def enviar_fotos_voo(voo_id: str, fotos: list[UploadFile] = File(...),
             if contagem:
                 db.marcar_foto_pessoas(foto_id, json.dumps(contagem, ensure_ascii=False))
 
-    return {"ok": True, "adicionadas": salvas, "qrs_lidos": qrs_lidos, "leitor_ativo": leitor_qr.disponivel()}
+    return {"ok": True, "adicionadas": salvas, "qrs_lidos": qrs_lidos,
+            "ignorados": ignorados, "leitor_ativo": leitor_qr.disponivel()}
 
 
 class FotoContagemDados(BaseModel):

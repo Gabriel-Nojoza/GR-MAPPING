@@ -68,12 +68,11 @@ export default function VooDetalhe() {
       setSubindo(true); setErro(""); setAviso("");
       const r = await enviarFotosVoo(id, arr);
       if (fileRef.current) fileRef.current.value = "";
+      const ign = r.ignorados ? ` · ${r.ignorados} arquivo(s) não reconhecido(s) e ignorado(s)` : "";
       setAviso(
         r.qrs_lidos > 0
-          ? `${r.adicionadas} foto(s) · ${r.qrs_lidos} máquina(s) identificada(s) pelo QR automaticamente.`
-          : r.leitor_ativo
-            ? `${r.adicionadas} foto(s) · nenhum QR lido — marque as máquinas no mapa.`
-            : `${r.adicionadas} foto(s) enviada(s).`,
+          ? `${r.adicionadas} arquivo(s) · ${r.qrs_lidos} máquina(s) identificada(s) pelo QR${ign}.`
+          : `${r.adicionadas} arquivo(s) enviado(s)${ign}.`,
       );
       await carregar();
     } catch (e) { setErro(e instanceof Error ? e.message : "Falha no upload."); }
@@ -150,7 +149,7 @@ export default function VooDetalhe() {
             <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 p-6 text-sm text-slate-500 hover:border-primary hover:text-primary">
               <ImagePlus size={18} />
               {subindo ? "Lendo os QRs…" : "Selecionar fotos e vídeos do voo (vários)"}
-              <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif,video/mp4,video/quicktime" multiple className="hidden" onChange={(e) => upload(e.target.files)} />
+              <input ref={fileRef} type="file" accept="image/*,video/*,.heic,.heif,.mov,.mp4" multiple className="hidden" onChange={(e) => upload(e.target.files)} />
             </label>
             <p className="mt-1.5 text-xs text-slate-400">O QR só é lido nas fotos. Os vídeos ficam guardados junto, como registro do voo.</p>
 
