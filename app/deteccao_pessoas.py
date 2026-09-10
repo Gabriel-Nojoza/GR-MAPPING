@@ -30,9 +30,14 @@ except Exception:  # ambiente sem as libs de visão
     YOLO = None
 
 _MODELO = None
-_CAMINHO_MODELO = os.getenv("YOLO_MODELO", "yolov8n.pt")
-_CONF_MIN = 0.25
-_IMGSZ = 960
+_CAMINHO_MODELO = os.getenv("YOLO_MODELO", "yolov8s.pt")
+_CONF_MIN = 0.20
+_IMGSZ = 1024
+# em foto aérea a pessoa fica com ~20 px — rodar o YOLO na imagem inteira
+# reduzida "some" com ela. Quebrar em pedaços com sobreposição e rodar em
+# cada um recupera bastante (técnica SAHI).
+_TILE_LADO = 1100
+_TILE_OVERLAP = 0.25
 
 # faixas de matiz em HSV (H: 0-179 no OpenCV) por cor de capacete cadastrada
 # em Trabalhadores. Vermelho aparece nas duas pontas da roda de cores.
@@ -74,6 +79,30 @@ def _cor_do_capacete(cabeca_hsv) -> str | None:
     return melhor if melhor_frac >= _FRACAO_MIN_COR else None
 
 
+def _tiles(larg: int, alt: int):
+    """Gera janelas (x1,y1,x2,y2) cobrindo a imagem, com sobreposição."""
+    if max(larg, alt) <= _TILE_LADO:
+        yield (0, 0, larg, alt)
+        return
+    passo = int(_TILE_LADO * (1 - _TILE_OVERLAP))
+    for y in range(0, alt, passo):
+        for x in range(0, larg, passo):
+            x2 = min(x + _TILE_LADO, larg)
+            y2 = min(y + _TILE_LADO, alt)
+            yield (max(0, x2 - _TILE_LADO), max(0, y2 - _TILE_LADO), x2, y2)
+
+
+def _dedup(caixas: list[tuple[int, int, int, int]], dist_min: int = 40):
+    """Remove caixas cujo centro está muito perto de outra já aceita."""
+    aceitas: list[tuple[int, int, int, int]] = []
+    for b in caixas:
+        cx, cy = (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
+        if any(abs(cx - (a[0] + a[2]) / 2) < dist_min and abs(cy - (a[1] + a[3]) / 2) < dist_min for a in aceitas):
+            continue
+        aceitas.append(b)
+    return aceitas
+
+
 def contar_pessoas(caminho: str | Path) -> dict[str, int]:
     """
     Conta as pessoas na foto e agrupa por cor de capacete.
@@ -87,22 +116,26 @@ def contar_pessoas(caminho: str | Path) -> dict[str, int]:
     if imagem is None:
         return {}
 
-    try:
-        resultado = modelo.predict(imagem, imgsz=_IMGSZ, conf=_CONF_MIN, classes=[0], verbose=False)[0]
-    except Exception:
-        return {}
+    alt_img, larg_img = imagem.shape[:2]
+    caixas: list[tuple[int, int, int, int]] = []
+    for (tx1, ty1, tx2, ty2) in _tiles(larg_img, alt_img):
+        recorte = imagem[ty1:ty2, tx1:tx2]
+        try:
+            res = modelo.predict(recorte, imgsz=_IMGSZ, conf=_CONF_MIN, classes=[0], verbose=False)[0]
+        except Exception:
+            continue
+        for box in res.boxes:
+            bx1, by1, bx2, by2 = (int(v) for v in box.xyxy[0].tolist())
+            caixas.append((tx1 + bx1, ty1 + by1, tx1 + bx2, ty1 + by2))
 
     hsv = cv2.cvtColor(imagem, cv2.COLOR_BGR2HSV)
-    alt_img, larg_img = imagem.shape[:2]
     contagem: dict[str, int] = {}
-    for box in resultado.boxes:
-        x1, y1, x2, y2 = (int(v) for v in box.xyxy[0].tolist())
+    for x1, y1, x2, y2 in _dedup(caixas):
         x1, y1 = max(0, x1), max(0, y1)
         x2, y2 = min(larg_img, x2), min(alt_img, y2)
         if x2 <= x1 or y2 <= y1:
             continue
-        # região do capacete: topo ~22% da caixa e faixa central (evita
-        # pegar o colete laranja/vermelho dos ombros)
+        # região do capacete: topo ~22% da caixa e faixa central
         alt = y2 - y1
         larg = x2 - x1
         fim_cabeca = y1 + max(1, int(alt * 0.22))

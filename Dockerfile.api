@@ -16,11 +16,11 @@ RUN apt-get update \
     && pip uninstall -y opencv-python opencv-python-headless opencv-contrib-python opencv-contrib-python-headless \
     && pip install --no-cache-dir opencv-contrib-python-headless \
     # baixa o modelo YOLO agora, pra não depender de rede no primeiro voo
-    && python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')" \
+    && python -c "from ultralytics import YOLO; YOLO('yolov8s.pt')" \
     && python -c "import cv2; assert hasattr(cv2, 'wechat_qrcode'), 'wechat_qrcode sumiu'" \
     && rm -rf /var/lib/apt/lists/* /root/.cache
 
-ENV YOLO_MODELO=/app/yolov8n.pt \
+ENV YOLO_MODELO=/app/yolov8s.pt \
     YOLO_CONFIG_DIR=/tmp/ultralytics
 
 COPY app ./app
