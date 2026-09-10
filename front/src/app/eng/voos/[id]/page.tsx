@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ImagePlus, MapPin, PlayCircle, Trash2, Upload, X } from "lucide-react";
+import { ArrowLeft, Download, ImagePlus, MapPin, PlayCircle, Trash2, Upload, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Mapa } from "@/components/eng/mapa";
 import {
@@ -68,13 +68,17 @@ export default function VooDetalhe() {
       setSubindo(true); setErro(""); setAviso("");
       const r = await enviarFotosVoo(id, arr);
       if (fileRef.current) fileRef.current.value = "";
-      const ign = r.ignorados ? ` · ${r.ignorados} arquivo(s) não reconhecido(s) e ignorado(s)` : "";
+      const ign = r.ignorados ? ` · ${r.ignorados} arquivo(s) não reconhecido(s)` : "";
       setAviso(
-        r.qrs_lidos > 0
-          ? `${r.adicionadas} arquivo(s) · ${r.qrs_lidos} máquina(s) identificada(s) pelo QR${ign}.`
-          : `${r.adicionadas} arquivo(s) enviado(s)${ign}.`,
+        r.processando
+          ? `${r.adicionadas} arquivo(s) salvo(s)${ign}. Lendo QR e contando pessoas em segundo plano — pode fechar.`
+          : `${r.adicionadas} arquivo(s) salvo(s)${ign}.`,
       );
       await carregar();
+      // o QR/contagem rodam depois — recarrega algumas vezes pra pegar o resultado
+      if (r.processando) {
+        [4000, 12000, 25000, 45000].forEach((ms) => setTimeout(() => { void carregar(); }, ms));
+      }
     } catch (e) { setErro(e instanceof Error ? e.message : "Falha no upload."); }
     finally {
       setSubindo(false);
@@ -148,7 +152,7 @@ export default function VooDetalhe() {
             <h2 className="flex items-center gap-2 font-semibold text-slate-800"><Upload size={16} className="text-primary" /> Fotos e vídeos do voo</h2>
             <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 p-6 text-sm text-slate-500 hover:border-primary hover:text-primary">
               <ImagePlus size={18} />
-              {subindo ? "Lendo os QRs…" : "Selecionar fotos e vídeos do voo (vários)"}
+              {subindo ? "Enviando…" : "Selecionar fotos e vídeos do voo (vários)"}
               <input ref={fileRef} type="file" accept="image/*,video/*,.heic,.heif,.mov,.mp4" multiple className="hidden" onChange={(e) => upload(e.target.files)} />
             </label>
             <p className="mt-1.5 text-xs text-slate-400">O QR só é lido nas fotos. Os vídeos ficam guardados junto, como registro do voo.</p>
@@ -169,7 +173,7 @@ export default function VooDetalhe() {
                 </div>
                 <p className="mt-2 flex items-center gap-1.5 text-xs text-sky-600">
                   <span className={`inline-block size-1.5 rounded-full bg-sky-500 ${subindo ? "animate-ping" : ""}`} />
-                  {subindo ? "Processando — lendo QR e contando pessoas nas fotos…" : "Processado."}
+                  {subindo ? "Enviando os arquivos…" : "Enviado."}
                 </p>
               </div>
             )}
@@ -254,8 +258,9 @@ export default function VooDetalhe() {
                   <X size={13} />
                 </button>
                 {eVideo ? (
-                  <a href={fotoVooUrl(id, f.id)} target="_blank" rel="noreferrer" className="flex h-28 w-full items-center justify-center bg-slate-900 text-white">
-                    <PlayCircle size={30} className="opacity-90" />
+                  <a href={`${fotoVooUrl(id, f.id)}?download=1`} className="flex h-28 w-full flex-col items-center justify-center gap-1 bg-slate-900 text-white/90">
+                    <Download size={24} />
+                    <span className="text-[11px]">baixar vídeo</span>
                   </a>
                 ) : (
                   // eslint-disable-next-line @next/next/no-img-element

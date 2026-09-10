@@ -1573,17 +1573,14 @@ def excluir_voo(voo_id: str):
 
 
 @app.post("/eng/voos/{voo_id}/fotos")
-def enviar_fotos_voo(voo_id: str, fotos: list[UploadFile] = File(...),
+def enviar_fotos_voo(voo_id: str, background_tasks: BackgroundTasks,
+                     fotos: list[UploadFile] = File(...),
                      contexto: dict | None = Depends(contexto_usuario)):
     voo = db.obter_voo(voo_id)
     if voo is None:
         raise HTTPException(status_code=404, detail="voo não encontrado")
 
     empresa_id = _empresa_do_contexto(contexto)
-    maquinas_validas = {r["id"] for r in db.listar_recursos_eng(empresa_id, "equipamento")}
-    frente = _frente_da_obra(voo["obra_id"], None)
-    coords_frente = _linha_da_frente(frente["geojson"]) if frente else []
-    ja_detectadas = {d["maquina_id"] for d in db.listar_deteccoes(voo_id) if d["metodo"] == "qr"}
 
     TIPOS_IMAGEM = {"image/jpeg", "image/png", "image/webp"}
     EXT_IMAGEM = (".jpg", ".jpeg", ".png", ".webp")
@@ -1592,7 +1589,8 @@ def enviar_fotos_voo(voo_id: str, fotos: list[UploadFile] = File(...),
     LIMITE_IMAGEM = 40 * 1024 * 1024
     LIMITE_VIDEO = 500 * 1024 * 1024
 
-    salvas, qrs_lidos, ignorados = 0, 0, 0
+    salvas, ignorados = 0, 0
+    pendentes: list[tuple[str, str, float | None, float | None]] = []
     for foto in fotos:
         nome_lower = (foto.filename or "").lower()
         ctype = (foto.content_type or "").lower()
@@ -1661,8 +1659,31 @@ def enviar_fotos_voo(voo_id: str, fotos: list[UploadFile] = File(...),
         db.adicionar_foto_voo(foto_id, voo_id, nome_arquivo, mime_arquivo,
                               meta["gps_lat"], meta["gps_lon"], meta["altitude_m"], meta["tirada_em"])
         salvas += 1
+        pendentes.append((foto_id, str(caminho), meta["gps_lat"], meta["gps_lon"]))
 
-        # leitura automática do QR (best-effort)
+    # QR e contagem de pessoas rodam DEPOIS da resposta, em segundo plano —
+    # o upload não fica preso esperando (uma foto sem QR chega a ~15s no CPU)
+    if pendentes:
+        background_tasks.add_task(_processar_fotos_voo, voo_id, empresa_id, pendentes)
+
+    return {"ok": True, "adicionadas": salvas, "processando": len(pendentes),
+            "ignorados": ignorados, "leitor_ativo": leitor_qr.disponivel()}
+
+
+def _processar_fotos_voo(voo_id: str, empresa_id: str | None,
+                         pendentes: list[tuple[str, str, float | None, float | None]]) -> None:
+    """Leitura de QR + contagem de pessoas das fotos recém-enviadas (background)."""
+    voo = db.obter_voo(voo_id)
+    if voo is None:
+        return
+    maquinas_validas = {r["id"] for r in db.listar_recursos_eng(empresa_id, "equipamento")}
+    frente = _frente_da_obra(voo["obra_id"], None)
+    coords_frente = _linha_da_frente(frente["geojson"]) if frente else []
+    ja_detectadas = {d["maquina_id"] for d in db.listar_deteccoes(voo_id) if d["metodo"] == "qr"}
+    modo_contagem = os.getenv("CONTAGEM_PESSOAS", "yolo").strip().lower()
+
+    for foto_id, caminho_str, gps_lat, gps_lon in pendentes:
+        caminho = Path(caminho_str)
         try:
             achados = leitor_qr.ler_qrs(caminho)
         except Exception:
@@ -1673,16 +1694,11 @@ def enviar_fotos_voo(voo_id: str, fotos: list[UploadFile] = File(...),
             mid = leitor_qr.id_maquina(item["texto"])
             if not mid or mid not in maquinas_validas or mid in ja_detectadas:
                 continue
-            lat, lon = meta["gps_lat"], meta["gps_lon"]
-            prog = _progressiva(coords_frente, lat, lon) if coords_frente else None
+            prog = _progressiva(coords_frente, gps_lat, gps_lon) if coords_frente else None
             db.criar_deteccao(uuid.uuid4().hex, voo_id, foto_id, mid,
-                              frente["id"] if frente else None, lat, lon, prog, "qr", None)
+                              frente["id"] if frente else None, gps_lat, gps_lon, prog, "qr", None)
             ja_detectadas.add(mid)
-            qrs_lidos += 1
 
-        # contagem de pessoas por cor de capacete (best-effort).
-        # CONTAGEM_PESSOAS = yolo (padrão) | gemini | off
-        modo_contagem = os.getenv("CONTAGEM_PESSOAS", "yolo").strip().lower()
         if modo_contagem != "off":
             contagem = {}
             try:
@@ -1696,9 +1712,6 @@ def enviar_fotos_voo(voo_id: str, fotos: list[UploadFile] = File(...),
                 contagem = {}
             if contagem:
                 db.marcar_foto_pessoas(foto_id, json.dumps(contagem, ensure_ascii=False))
-
-    return {"ok": True, "adicionadas": salvas, "qrs_lidos": qrs_lidos,
-            "ignorados": ignorados, "leitor_ativo": leitor_qr.disponivel()}
 
 
 class FotoContagemDados(BaseModel):
@@ -1715,12 +1728,16 @@ def definir_contagem_foto(voo_id: str, foto_id: str, dados: FotoContagemDados,
 
 
 @app.get("/eng/voos/{voo_id}/fotos/{foto_id}/imagem")
-def imagem_foto_voo(voo_id: str, foto_id: str):
+def imagem_foto_voo(voo_id: str, foto_id: str, download: int = 0):
     foto = db.obter_foto_voo(foto_id)
     caminho = next(iter(UPLOADS_DIR.glob(f"voo-{foto_id}.*")), None)
     if foto is None or caminho is None:
         raise HTTPException(status_code=404, detail="foto não encontrada")
-    return Response(content=caminho.read_bytes(), media_type=foto["mime"] or "image/jpeg")
+    headers = {}
+    if download:
+        nome = foto["nome_arquivo"] or caminho.name
+        headers["Content-Disposition"] = f'attachment; filename="{nome}"'
+    return Response(content=caminho.read_bytes(), media_type=foto["mime"] or "image/jpeg", headers=headers)
 
 
 @app.delete("/eng/voos/{voo_id}/fotos/{foto_id}")
