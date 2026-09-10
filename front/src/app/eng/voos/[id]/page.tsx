@@ -169,7 +169,7 @@ export default function VooDetalhe() {
             <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 p-6 text-sm text-slate-500 hover:border-primary hover:text-primary">
               <ImagePlus size={18} />
               {subindo ? "Lendo os QRs…" : "Selecionar fotos e vídeos do voo (vários)"}
-              <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime" multiple className="hidden" onChange={(e) => upload(e.target.files)} />
+              <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif,video/mp4,video/quicktime" multiple className="hidden" onChange={(e) => upload(e.target.files)} />
             </label>
             <p className="mt-1.5 text-xs text-slate-400">O QR só é lido nas fotos. Os vídeos ficam guardados junto, como registro do voo.</p>
 

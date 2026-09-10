@@ -24,6 +24,12 @@ from pathlib import Path
 
 from PIL import Image, ExifTags, ImageOps, UnidentifiedImageError
 
+try:  # deixa o PIL abrir HEIC/HEIF (formato padrão do iPhone)
+    from pillow_heif import register_heif_opener
+    register_heif_opener()
+except ImportError:
+    pass
+
 
 # ----------------------------------------------------------------------
 # Estrutura de saída

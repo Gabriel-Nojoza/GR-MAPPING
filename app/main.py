@@ -1585,23 +1585,50 @@ def enviar_fotos_voo(voo_id: str, fotos: list[UploadFile] = File(...),
     ja_detectadas = {d["maquina_id"] for d in db.listar_deteccoes(voo_id) if d["metodo"] == "qr"}
 
     TIPOS_IMAGEM = {"image/jpeg", "image/png", "image/webp"}
+    TIPOS_HEIC = {"image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence"}
     TIPOS_VIDEO = {"video/mp4", "video/quicktime"}
-    LIMITE_IMAGEM = 25 * 1024 * 1024
+    LIMITE_IMAGEM = 40 * 1024 * 1024
     LIMITE_VIDEO = 500 * 1024 * 1024
 
     salvas, qrs_lidos = 0, 0
     for foto in fotos:
         eh_video = foto.content_type in TIPOS_VIDEO
-        if not eh_video and foto.content_type not in TIPOS_IMAGEM:
+        eh_heic = foto.content_type in TIPOS_HEIC or (foto.filename or "").lower().endswith((".heic", ".heif"))
+        if not eh_video and not eh_heic and foto.content_type not in TIPOS_IMAGEM:
             continue
         conteudo = foto.file.read()
         limite = LIMITE_VIDEO if eh_video else LIMITE_IMAGEM
         if not conteudo or len(conteudo) > limite:
             continue
         foto_id = uuid.uuid4().hex
-        extensao = _extensao_por_mime(foto.content_type, ".mp4" if eh_video else ".jpg")
+        nome_arquivo = foto.filename or ("video.mp4" if eh_video else "foto.jpg")
+        mime_arquivo = foto.content_type or ("video/mp4" if eh_video else "image/jpeg")
+        if eh_heic and not eh_video:
+            extensao = ".heic"
+        else:
+            extensao = _extensao_por_mime(mime_arquivo, ".mp4" if eh_video else ".jpg")
         caminho = UPLOADS_DIR / f"voo-{foto_id}{extensao}"
         caminho.write_bytes(conteudo)
+
+        # foto de iPhone (HEIC): converte pra JPG preservando o EXIF (GPS),
+        # pra tudo daqui pra frente ser JPG normal (QR, IA, exibir no navegador)
+        if eh_heic and not eh_video:
+            try:
+                from PIL import Image as _Img
+                jpg = UPLOADS_DIR / f"voo-{foto_id}.jpg"
+                with _Img.open(caminho) as im:
+                    im.load()
+                    exif_bytes = im.info.get("exif") or b""
+                    convertida = im.convert("RGB")
+                if exif_bytes:
+                    convertida.save(jpg, "JPEG", quality=90, exif=exif_bytes)
+                else:
+                    convertida.save(jpg, "JPEG", quality=90)
+                caminho.unlink(missing_ok=True)
+                caminho = jpg
+                mime_arquivo = "image/jpeg"
+            except Exception:
+                pass  # se falhar a conversão, segue com o arquivo original
 
         # vídeo: sem QR pra ler, mas dá pra tentar puxar o GPS do metadado
         # (DJI e celular gravam a localização no arquivo)
@@ -1610,7 +1637,7 @@ def enviar_fotos_voo(voo_id: str, fotos: list[UploadFile] = File(...),
                 vmeta = gps_de_video(caminho)
             except Exception:
                 vmeta = {"gps_lat": None, "gps_lon": None, "altitude_m": None, "tirada_em": None}
-            db.adicionar_foto_voo(foto_id, voo_id, foto.filename or "video.mp4", foto.content_type,
+            db.adicionar_foto_voo(foto_id, voo_id, nome_arquivo, mime_arquivo,
                                   vmeta["gps_lat"], vmeta["gps_lon"], vmeta["altitude_m"], vmeta["tirada_em"])
             salvas += 1
             continue
@@ -1619,7 +1646,7 @@ def enviar_fotos_voo(voo_id: str, fotos: list[UploadFile] = File(...),
             meta = dados_foto_voo(caminho)
         except Exception:
             meta = {"gps_lat": None, "gps_lon": None, "altitude_m": None, "tirada_em": None}
-        db.adicionar_foto_voo(foto_id, voo_id, foto.filename or "foto.jpg", foto.content_type,
+        db.adicionar_foto_voo(foto_id, voo_id, nome_arquivo, mime_arquivo,
                               meta["gps_lat"], meta["gps_lon"], meta["altitude_m"], meta["tirada_em"])
         salvas += 1
 
