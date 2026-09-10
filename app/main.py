@@ -1671,6 +1671,16 @@ def imagem_foto_voo(voo_id: str, foto_id: str):
     return Response(content=caminho.read_bytes(), media_type=foto["mime"] or "image/jpeg")
 
 
+@app.delete("/eng/voos/{voo_id}/fotos/{foto_id}")
+def excluir_foto_voo(voo_id: str, foto_id: str, contexto: dict | None = Depends(contexto_usuario)):
+    """Remove uma foto/vídeo do voo (ex.: subiu errado) e o que veio dela."""
+    if not db.excluir_foto_voo(foto_id):
+        raise HTTPException(status_code=404, detail="foto não encontrada")
+    for arq in UPLOADS_DIR.glob(f"voo-{foto_id}.*"):
+        arq.unlink(missing_ok=True)
+    return {"ok": True}
+
+
 @app.post("/eng/voos/{voo_id}/deteccoes")
 def criar_deteccao(voo_id: str, dados: DeteccaoDados):
     voo = db.obter_voo(voo_id)

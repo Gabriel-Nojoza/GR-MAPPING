@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ImagePlus, MapPin, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, ImagePlus, MapPin, PlayCircle, Trash2, Upload, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Mapa } from "@/components/eng/mapa";
 import {
-  atualizarDeteccao, enviarFotosVoo, excluirDeteccao, fotoVooUrl,
+  atualizarDeteccao, enviarFotosVoo, excluirDeteccao, excluirFotoVoo, fotoVooUrl,
   getRecursosEng, getVoo,
   type Deteccao, type RecursoEng, type Voo,
 } from "@/lib/api";
@@ -106,6 +106,12 @@ export default function VooDetalhe() {
     await excluirDeteccao(d.id); await carregar();
   }
 
+  async function removerFoto(fotoId: string) {
+    if (!confirm("Remover este arquivo do voo?")) return;
+    try { await excluirFotoVoo(id, fotoId); await carregar(); }
+    catch (e) { setErro(e instanceof Error ? e.message : "Não foi possível remover."); }
+  }
+
   async function trocarMaquina(d: Deteccao, novaMaquinaId: string) {
     if (!novaMaquinaId || novaMaquinaId === d.maquina_id) return;
     try {
@@ -165,9 +171,9 @@ export default function VooDetalhe() {
               <div className="mt-3">
                 <div className="grid grid-cols-3 gap-2">
                   {scanPreviews.map((p, i) => (
-                    <div key={i} className={`aspect-square rounded-lg border border-sky-300 bg-slate-900 ${subindo ? "qr-scanning" : ""}`}>
+                    <div key={i} className={`aspect-square rounded-lg border border-sky-300 bg-slate-900 ${subindo && !p.video ? "qr-scanning" : ""}`}>
                       {p.video ? (
-                        <video src={p.url} muted preload="metadata" className="h-full w-full rounded-lg object-cover opacity-90" />
+                        <div className="flex h-full w-full items-center justify-center rounded-lg text-white/80"><PlayCircle size={26} /></div>
                       ) : (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={p.url} alt="" className="h-full w-full rounded-lg object-cover opacity-90" />
@@ -177,7 +183,7 @@ export default function VooDetalhe() {
                 </div>
                 <p className="mt-2 flex items-center gap-1.5 text-xs text-sky-600">
                   <span className={`inline-block size-1.5 rounded-full bg-sky-500 ${subindo ? "animate-ping" : ""}`} />
-                  {subindo ? "Procurando os QR codes nas fotos…" : "Leitura concluída."}
+                  {subindo ? "Processando — lendo QR e contando pessoas nas fotos…" : "Processado."}
                 </p>
               </div>
             )}
@@ -260,15 +266,24 @@ export default function VooDetalhe() {
               const eVideo = (f.mime ?? "").startsWith("video/");
               const pessoasFoto = f.pessoas && Object.keys(f.pessoas).length > 0 ? f.pessoas : null;
               return (
-              <div key={f.id} className="overflow-hidden rounded-lg border border-slate-200">
+              <div key={f.id} className="group relative overflow-hidden rounded-lg border border-slate-200">
+                <button
+                  onClick={() => removerFoto(f.id)}
+                  aria-label="Remover arquivo"
+                  className="absolute right-1 top-1 z-10 rounded-full bg-slate-900/70 p-1 text-white opacity-0 transition group-hover:opacity-100 hover:bg-red-600"
+                >
+                  <X size={13} />
+                </button>
                 {eVideo ? (
-                  <video src={fotoVooUrl(id, f.id)} controls preload="metadata" className="h-28 w-full bg-slate-900 object-cover" />
+                  <a href={fotoVooUrl(id, f.id)} target="_blank" rel="noreferrer" className="flex h-28 w-full items-center justify-center bg-slate-900 text-white">
+                    <PlayCircle size={30} className="opacity-90" />
+                  </a>
                 ) : (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={fotoVooUrl(id, f.id)} alt={f.nome_arquivo} className="h-28 w-full object-cover" />
                 )}
                 <div className="flex items-center justify-between gap-1 p-1.5 text-[11px] text-slate-500">
-                  <span className="truncate">{eVideo ? "🎬 vídeo" : f.gps_lat != null ? "📍 GPS" : "sem GPS"}</span>
+                  <span className="truncate">{eVideo ? "🎬 vídeo — abrir" : f.gps_lat != null ? "📍 GPS" : "sem GPS"}</span>
                   {!eVideo && f.gps_lat != null && <button onClick={() => usarGps(f.gps_lat!, f.gps_lon!)} className="shrink-0 rounded bg-indigo-50 px-1.5 py-0.5 text-primary hover:bg-indigo-100">usar aqui</button>}
                 </div>
                 {pessoasFoto && (

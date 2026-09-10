@@ -37,14 +37,14 @@ _IMGSZ = 960
 # faixas de matiz em HSV (H: 0-179 no OpenCV) por cor de capacete cadastrada
 # em Trabalhadores. Vermelho aparece nas duas pontas da roda de cores.
 _FAIXAS_HSV: dict[str, list[tuple[tuple[int, int, int], tuple[int, int, int]]]] = {
-    "Amarelo": [((20, 90, 90), (35, 255, 255))],
-    "Laranja": [((8, 100, 100), (20, 255, 255))],
-    "Verde": [((36, 60, 60), (85, 255, 255))],
-    "Azul": [((90, 60, 60), (130, 255, 255))],
-    "Vermelho": [((0, 100, 90), (7, 255, 255)), ((173, 100, 90), (179, 255, 255))],
-    "Branco": [((0, 0, 190), (179, 45, 255))],
+    "Amarelo": [((22, 110, 110), (34, 255, 255))],
+    "Laranja": [((8, 120, 120), (21, 255, 255))],
+    "Verde": [((38, 70, 60), (85, 255, 255))],
+    "Azul": [((92, 70, 55), (128, 255, 255))],
+    "Vermelho": [((0, 130, 110), (6, 255, 255)), ((174, 130, 110), (179, 255, 255))],
+    "Branco": [((0, 0, 165), (179, 55, 255))],
 }
-_FRACAO_MIN_COR = 0.15  # a cor precisa cobrir ao menos 15% da cabeça pra valer
+_FRACAO_MIN_COR = 0.18  # a cor precisa cobrir ao menos 18% da região do capacete
 
 
 def disponivel() -> bool:
@@ -101,9 +101,16 @@ def contar_pessoas(caminho: str | Path) -> dict[str, int]:
         x2, y2 = min(larg_img, x2), min(alt_img, y2)
         if x2 <= x1 or y2 <= y1:
             continue
-        # região da cabeça = 35% de cima da caixa da pessoa
-        fim_cabeca = y1 + max(1, int((y2 - y1) * 0.35))
-        cor = _cor_do_capacete(hsv[y1:fim_cabeca, x1:x2])
+        # região do capacete: topo ~22% da caixa e faixa central (evita
+        # pegar o colete laranja/vermelho dos ombros)
+        alt = y2 - y1
+        larg = x2 - x1
+        fim_cabeca = y1 + max(1, int(alt * 0.22))
+        cx1 = x1 + int(larg * 0.20)
+        cx2 = x2 - int(larg * 0.20)
+        if cx2 <= cx1:
+            cx1, cx2 = x1, x2
+        cor = _cor_do_capacete(hsv[y1:fim_cabeca, cx1:cx2])
         chave = cor or "Sem capacete"
         contagem[chave] = contagem.get(chave, 0) + 1
     return contagem

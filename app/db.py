@@ -1329,6 +1329,14 @@ def obter_foto_voo(id_: str) -> sqlite3.Row | None:
         return conn.execute("SELECT * FROM eng_voo_fotos WHERE id = ?", (id_,)).fetchone()
 
 
+def excluir_foto_voo(id_: str) -> bool:
+    """Remove uma foto do voo e as detecções que vieram dela."""
+    with _conectar() as conn:
+        conn.execute("DELETE FROM eng_deteccoes WHERE foto_id = ?", (id_,))
+        cur = conn.execute("DELETE FROM eng_voo_fotos WHERE id = ?", (id_,))
+        return cur.rowcount > 0
+
+
 def marcar_foto_qr(id_: str) -> None:
     with _conectar() as conn:
         conn.execute("UPDATE eng_voo_fotos SET tem_qr = 1 WHERE id = ?", (id_,))
