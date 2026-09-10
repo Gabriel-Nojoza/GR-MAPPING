@@ -1348,6 +1348,11 @@ def marcar_foto_pessoas(id_: str, pessoas_json: str) -> None:
         conn.execute("UPDATE eng_voo_fotos SET pessoas_json = ? WHERE id = ?", (pessoas_json, id_))
 
 
+def atualizar_mime_foto(id_: str, mime: str) -> None:
+    with _conectar() as conn:
+        conn.execute("UPDATE eng_voo_fotos SET mime = ? WHERE id = ?", (mime, id_))
+
+
 def definir_foto_contagem(id_: str, incluir: bool) -> bool:
     """Marca/desmarca se a foto entra na contagem oficial de pessoas do voo."""
     with _conectar() as conn:

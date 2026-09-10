@@ -21,6 +21,8 @@ import math
 import mimetypes
 import os
 import asyncio
+import shutil
+import subprocess
 import tempfile
 import uuid
 from datetime import date
@@ -1590,7 +1592,7 @@ def enviar_fotos_voo(voo_id: str, background_tasks: BackgroundTasks,
     LIMITE_VIDEO = 500 * 1024 * 1024
 
     salvas, ignorados = 0, 0
-    pendentes: list[tuple[str, str, float | None, float | None]] = []
+    pendentes: list[tuple[str, str, str, float | None, float | None]] = []
     for foto in fotos:
         nome_lower = (foto.filename or "").lower()
         ctype = (foto.content_type or "").lower()
@@ -1650,6 +1652,7 @@ def enviar_fotos_voo(voo_id: str, background_tasks: BackgroundTasks,
             db.adicionar_foto_voo(foto_id, voo_id, nome_arquivo, mime_arquivo,
                                   vmeta["gps_lat"], vmeta["gps_lon"], vmeta["altitude_m"], vmeta["tirada_em"])
             salvas += 1
+            pendentes.append(("vid", foto_id, str(caminho), None, None))
             continue
 
         try:
@@ -1659,7 +1662,7 @@ def enviar_fotos_voo(voo_id: str, background_tasks: BackgroundTasks,
         db.adicionar_foto_voo(foto_id, voo_id, nome_arquivo, mime_arquivo,
                               meta["gps_lat"], meta["gps_lon"], meta["altitude_m"], meta["tirada_em"])
         salvas += 1
-        pendentes.append((foto_id, str(caminho), meta["gps_lat"], meta["gps_lon"]))
+        pendentes.append(("img", foto_id, str(caminho), meta["gps_lat"], meta["gps_lon"]))
 
     # QR e contagem de pessoas rodam DEPOIS da resposta, em segundo plano —
     # o upload não fica preso esperando (uma foto sem QR chega a ~15s no CPU)
@@ -1670,9 +1673,46 @@ def enviar_fotos_voo(voo_id: str, background_tasks: BackgroundTasks,
             "ignorados": ignorados, "leitor_ativo": leitor_qr.disponivel()}
 
 
+def _converter_video_navegador(caminho: Path, foto_id: str) -> None:
+    """
+    Transcodifica o vídeo pra H.264/AAC 720p — o iPhone grava em HEVC, que o
+    Chrome não toca no navegador. Roda em segundo plano (é pesado).
+    """
+    if caminho.suffix.lower() == ".mp4" and shutil.which("ffprobe"):
+        try:
+            info = subprocess.run(
+                ["ffprobe", "-v", "quiet", "-select_streams", "v:0", "-show_entries",
+                 "stream=codec_name", "-of", "csv=p=0", str(caminho)],
+                capture_output=True, text=True, timeout=15,
+            ).stdout.strip().lower()
+            if info in ("h264", "avc1"):  # já é compatível, não mexe
+                db.atualizar_mime_foto(foto_id, "video/mp4")
+                return
+        except Exception:
+            pass
+
+    saida = UPLOADS_DIR / f"voo-{foto_id}.mp4"
+    tmp = UPLOADS_DIR / f"voo-{foto_id}.conv.mp4"
+    try:
+        r = subprocess.run(
+            ["ffmpeg", "-y", "-i", str(caminho), "-vf", "scale=-2:'min(720,ih)'",
+             "-c:v", "libx264", "-preset", "veryfast", "-crf", "28",
+             "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(tmp)],
+            capture_output=True, text=True, timeout=900,
+        )
+        if r.returncode != 0 or not tmp.exists():
+            return
+        if caminho != saida:
+            caminho.unlink(missing_ok=True)
+        tmp.replace(saida)
+        db.atualizar_mime_foto(foto_id, "video/mp4")
+    except Exception:
+        tmp.unlink(missing_ok=True)
+
+
 def _processar_fotos_voo(voo_id: str, empresa_id: str | None,
-                         pendentes: list[tuple[str, str, float | None, float | None]]) -> None:
-    """Leitura de QR + contagem de pessoas das fotos recém-enviadas (background)."""
+                         pendentes: list[tuple[str, str, str, float | None, float | None]]) -> None:
+    """QR + contagem de pessoas (fotos) e conversão de vídeo — em segundo plano."""
     voo = db.obter_voo(voo_id)
     if voo is None:
         return
@@ -1682,8 +1722,11 @@ def _processar_fotos_voo(voo_id: str, empresa_id: str | None,
     ja_detectadas = {d["maquina_id"] for d in db.listar_deteccoes(voo_id) if d["metodo"] == "qr"}
     modo_contagem = os.getenv("CONTAGEM_PESSOAS", "yolo").strip().lower()
 
-    for foto_id, caminho_str, gps_lat, gps_lon in pendentes:
+    for tipo, foto_id, caminho_str, gps_lat, gps_lon in pendentes:
         caminho = Path(caminho_str)
+        if tipo == "vid":
+            _converter_video_navegador(caminho, foto_id)
+            continue
         try:
             achados = leitor_qr.ler_qrs(caminho)
         except Exception:

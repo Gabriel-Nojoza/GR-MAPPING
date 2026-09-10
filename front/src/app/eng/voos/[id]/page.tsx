@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Download, ImagePlus, MapPin, PlayCircle, Trash2, Upload, X } from "lucide-react";
+import { ArrowLeft, ImagePlus, MapPin, PlayCircle, Trash2, Upload, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Mapa } from "@/components/eng/mapa";
 import {
@@ -75,9 +75,9 @@ export default function VooDetalhe() {
           : `${r.adicionadas} arquivo(s) salvo(s)${ign}.`,
       );
       await carregar();
-      // o QR/contagem rodam depois — recarrega algumas vezes pra pegar o resultado
+      // QR/contagem/conversão de vídeo rodam depois — recarrega algumas vezes
       if (r.processando) {
-        [4000, 12000, 25000, 45000].forEach((ms) => setTimeout(() => { void carregar(); }, ms));
+        [4000, 12000, 25000, 45000, 75000, 120000].forEach((ms) => setTimeout(() => { void carregar(); }, ms));
       }
     } catch (e) { setErro(e instanceof Error ? e.message : "Falha no upload."); }
     finally {
@@ -247,6 +247,7 @@ export default function VooDetalhe() {
           <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-6">
             {voo.fotos!.map((f) => {
               const eVideo = (f.mime ?? "").startsWith("video/");
+              const videoPronto = f.mime === "video/mp4";
               const pessoasFoto = f.pessoas && Object.keys(f.pessoas).length > 0 ? f.pessoas : null;
               return (
               <div key={f.id} className="group relative overflow-hidden rounded-lg border border-slate-200">
@@ -258,10 +259,14 @@ export default function VooDetalhe() {
                   <X size={13} />
                 </button>
                 {eVideo ? (
-                  <a href={`${fotoVooUrl(id, f.id)}?download=1`} className="flex h-28 w-full flex-col items-center justify-center gap-1 bg-slate-900 text-white/90">
-                    <Download size={24} />
-                    <span className="text-[11px]">baixar vídeo</span>
-                  </a>
+                  videoPronto ? (
+                    <video src={fotoVooUrl(id, f.id)} controls preload="metadata" className="h-28 w-full bg-slate-900 object-contain" />
+                  ) : (
+                    <div className="flex h-28 w-full flex-col items-center justify-center gap-1 bg-slate-900 text-white/80">
+                      <PlayCircle size={22} />
+                      <span className="text-[11px]">convertendo vídeo…</span>
+                    </div>
+                  )
                 ) : (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={fotoVooUrl(id, f.id)} alt={f.nome_arquivo} className="h-28 w-full object-cover" />
