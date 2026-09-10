@@ -7,7 +7,7 @@ import { ArrowLeft, ImagePlus, MapPin, PlayCircle, Trash2, Upload, X } from "luc
 import { Card } from "@/components/ui/card";
 import { Mapa } from "@/components/eng/mapa";
 import {
-  atualizarDeteccao, enviarFotosVoo, excluirDeteccao, excluirFotoVoo, fotoVooUrl,
+  atualizarDeteccao, criarDeteccao, enviarFotosVoo, excluirDeteccao, excluirFotoVoo, fotoVooUrl,
   getRecursosEng, getVoo,
   type Deteccao, type RecursoEng, type Voo,
 } from "@/lib/api";
@@ -84,16 +84,21 @@ export default function VooDetalhe() {
   }
 
   async function marcar(lat: number, lon: number) {
+    // 1) tem uma detecção de QR sem posição pra essa máquina? posiciona ela
     const semPos = (voo?.deteccoes ?? []).find(
       (d) => d.lat == null && (maquinaSel ? d.maquina_id === maquinaSel : true),
     );
-    if (!semPos) {
-      setAviso('Clique em "posicionar" numa máquina sem posição antes de marcar no mapa.');
-      return;
-    }
     try {
-      await atualizarDeteccao(semPos.id, { maquina_id: semPos.maquina_id, lat, lon });
-      setMaquinaSel(""); setAviso("");
+      if (semPos) {
+        await atualizarDeteccao(semPos.id, { maquina_id: semPos.maquina_id, lat, lon });
+      } else if (maquinaSel) {
+        // 2) sem QR — cria uma marcação manual pra máquina selecionada
+        await criarDeteccao(id, { maquina_id: maquinaSel, lat, lon });
+      } else {
+        setAviso("Escolha a máquina em “Marcar máquina no mapa” antes de clicar.");
+        return;
+      }
+      setAviso(""); setErro("");
       await carregar();
     } catch (e) { setErro(e instanceof Error ? e.message : "Não foi possível marcar."); }
   }
@@ -127,6 +132,7 @@ export default function VooDetalhe() {
   }
 
   const temContagemPessoas = (voo?.fotos ?? []).some((f) => f.pessoas && Object.keys(f.pessoas).length > 0);
+  const manualDets = (voo?.deteccoes ?? []).filter((d) => d.metodo === "manual");
 
   if (!voo) return <div className="mx-auto max-w-[100rem] text-sm text-slate-400">Carregando…{erro && <span className="text-red-600"> — {erro}</span>}</div>;
 
@@ -153,7 +159,7 @@ export default function VooDetalhe() {
             <span className="inline-flex items-center gap-1"><span className="inline-block size-2.5 rounded-full bg-red-500" /> máquina parada</span>
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            Fotos com GPS posicionam a máquina sozinhas. Se alguma ficou &quot;sem posição&quot;, clique em <b>posicionar</b> ao lado e depois no mapa.
+            Fotos com QR + GPS posicionam a máquina sozinhas. Sem QR: escolha a máquina em <b>&quot;Marcar máquina no mapa&quot;</b> e clique aqui onde ela estava.
           </p>
         </Card>
 
@@ -238,6 +244,33 @@ export default function VooDetalhe() {
             )}
           </Card>
 
+          <Card className="p-4">
+            <h2 className="font-semibold text-slate-800">Marcar máquina no mapa</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Quando não deu pra usar o QR (máquina operando, vento, fio perto). Escolha a máquina, depois
+              <b> clique no mapa</b> onde ela estava — ou use o botão <b>&quot;usar aqui&quot;</b> numa foto/vídeo com GPS lá embaixo.
+            </p>
+            <select
+              value={maquinaSel}
+              onChange={(e) => setMaquinaSel(e.target.value)}
+              className="mt-3 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary"
+            >
+              <option value="">Escolha a máquina…</option>
+              {maquinas.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
+            </select>
+
+            {manualDets.length > 0 && (
+              <div className="mt-3 divide-y divide-slate-50 border-t border-slate-100">
+                {manualDets.map((d) => (
+                  <div key={d.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+                    <span className="flex items-center gap-2 text-slate-700"><MapPin size={14} className="text-emerald-600" /> {maqNome.get(d.maquina_id) ?? "Máquina"}</span>
+                    <button onClick={() => removerDet(d)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 size={13} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
           {temContagemPessoas && (
             <Card className="p-5 ring-1 ring-amber-200">
               <h2 className="flex items-center gap-2 font-semibold text-slate-800">Pessoas em obra <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">experimental</span></h2>
@@ -283,8 +316,8 @@ export default function VooDetalhe() {
                   <img src={fotoVooUrl(id, f.id)} alt={f.nome_arquivo} className="h-28 w-full object-cover" />
                 )}
                 <div className="flex items-center justify-between gap-1 p-1.5 text-[11px] text-slate-500">
-                  <span className="truncate">{eVideo ? "🎬 vídeo — abrir" : f.gps_lat != null ? "📍 GPS" : "sem GPS"}</span>
-                  {!eVideo && f.gps_lat != null && <button onClick={() => usarGps(f.gps_lat!, f.gps_lon!)} className="shrink-0 rounded bg-indigo-50 px-1.5 py-0.5 text-primary hover:bg-indigo-100">usar aqui</button>}
+                  <span className="truncate">{eVideo ? (f.gps_lat != null ? "🎬 vídeo · 📍 GPS" : "🎬 vídeo") : f.gps_lat != null ? "📍 GPS" : "sem GPS"}</span>
+                  {f.gps_lat != null && <button onClick={() => usarGps(f.gps_lat!, f.gps_lon!)} className="shrink-0 rounded bg-indigo-50 px-1.5 py-0.5 text-primary hover:bg-indigo-100">usar aqui</button>}
                 </div>
                 {pessoasFoto && (
                   <p className="truncate border-t border-slate-100 px-1.5 py-1 text-[11px] text-slate-500">
@@ -295,7 +328,7 @@ export default function VooDetalhe() {
               );
             })}
           </div>
-          <p className="mt-2 text-xs text-slate-400">&quot;usar aqui&quot; marca a máquina selecionada na posição GPS daquela foto.</p>
+          <p className="mt-2 text-xs text-slate-400">&quot;usar aqui&quot; marca a máquina escolhida em cima na posição GPS daquele arquivo.</p>
         </Card>
       )}
       {erro && <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</p>}

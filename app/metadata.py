@@ -16,7 +16,9 @@ A DJI grava duas camadas de metadado no JPEG:
 """
 from __future__ import annotations
 
+import json
 import re
+import subprocess
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
@@ -251,6 +253,50 @@ def dados_foto_voo(path: str | Path) -> dict:
         "altitude_m": md.relative_altitude_m,
         "tirada_em": tirada_em,
     }
+
+
+_ISO6709 = re.compile(r"([+-]\d+(?:\.\d+)?)([+-]\d+(?:\.\d+)?)")
+
+
+def gps_de_video(path: str | Path) -> dict:
+    """
+    Tenta puxar a posição de um vídeo (DJI e celular gravam no metadado
+    'location', no formato ISO 6709 tipo '+3.8405-38.6552/'). Usa o ffprobe
+    (que já vem com o ffmpeg). Devolve None nos campos quando não acha.
+    """
+    vazio = {"gps_lat": None, "gps_lon": None, "altitude_m": None, "tirada_em": None}
+    try:
+        saida = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", str(path)],
+            capture_output=True, text=True, timeout=20,
+        )
+        dados = json.loads(saida.stdout or "{}")
+    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
+        return vazio
+
+    tags = {}
+    tags.update((dados.get("format") or {}).get("tags") or {})
+    for s in dados.get("streams") or []:
+        tags.update(s.get("tags") or {})
+    tags = {k.lower(): v for k, v in tags.items()}
+
+    bruto = None
+    for chave in ("location", "location-eng", "com.apple.quicktime.location.iso6709", "xyz"):
+        if tags.get(chave):
+            bruto = tags[chave]
+            break
+
+    lat = lon = None
+    if bruto:
+        m = _ISO6709.match(bruto.strip())
+        if m:
+            lat, lon = _to_float(m.group(1)), _to_float(m.group(2))
+
+    tirada_em = tags.get("creation_time")
+    if isinstance(tirada_em, str):
+        tirada_em = tirada_em.replace("Z", "").split(".")[0] or None
+
+    return {"gps_lat": lat, "gps_lon": lon, "altitude_m": None, "tirada_em": tirada_em}
 
 
 # ----------------------------------------------------------------------

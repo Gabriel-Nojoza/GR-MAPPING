@@ -36,7 +36,7 @@ from pydantic import BaseModel
 load_dotenv()  # lê o .env local (GEMINI_API_KEY) antes de qualquer coisa
 
 from app import db, ramos
-from app.metadata import read_photo_metadata, PhotoMetadata, dados_foto_voo
+from app.metadata import read_photo_metadata, PhotoMetadata, dados_foto_voo, gps_de_video
 from app import qr as leitor_qr
 from app import deteccao_pessoas as detector_pessoas
 from app.gsd import compute_gsd
@@ -1603,10 +1603,15 @@ def enviar_fotos_voo(voo_id: str, fotos: list[UploadFile] = File(...),
         caminho = UPLOADS_DIR / f"voo-{foto_id}{extensao}"
         caminho.write_bytes(conteudo)
 
-        # vídeo não tem EXIF/QR pra extrair — só guarda o arquivo pra registro
+        # vídeo: sem QR pra ler, mas dá pra tentar puxar o GPS do metadado
+        # (DJI e celular gravam a localização no arquivo)
         if eh_video:
+            try:
+                vmeta = gps_de_video(caminho)
+            except Exception:
+                vmeta = {"gps_lat": None, "gps_lon": None, "altitude_m": None, "tirada_em": None}
             db.adicionar_foto_voo(foto_id, voo_id, foto.filename or "video.mp4", foto.content_type,
-                                  None, None, None, None)
+                                  vmeta["gps_lat"], vmeta["gps_lon"], vmeta["altitude_m"], vmeta["tirada_em"])
             salvas += 1
             continue
 
