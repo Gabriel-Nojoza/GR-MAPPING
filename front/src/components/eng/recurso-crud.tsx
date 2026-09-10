@@ -5,6 +5,7 @@ import { ImagePlus, ImageIcon, Plus, QrCode, Search, Trash2 } from "lucide-react
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EtiquetaQr } from "@/components/eng/etiqueta-qr";
+import { CampoLocal } from "@/components/eng/campo-local";
 import {
   criarRecursoEng, enviarFotoRecursoEng, excluirRecursoEng, getRecursosEng,
   recursoEngFotoUrl, type RecursoEng,
@@ -100,6 +101,17 @@ export function RecursoCrud({ tipo, topo }: { tipo: string; topo?: React.ReactNo
 
     if (campo.tipo === "textarea") {
       control = <textarea value={valor} onChange={onChange} placeholder={campo.placeholder ?? ""} rows={2} className={CONTROLE} />;
+    } else if (campo.tipo === "local") {
+      control = (
+        <CampoLocal
+          valor={valor}
+          onChange={(txt, lat, lon) => {
+            setCampo(campo.key, txt);
+            setCampo(`${campo.key}_lat`, lat != null ? String(lat) : "");
+            setCampo(`${campo.key}_lon`, lon != null ? String(lon) : "");
+          }}
+        />
+      );
     } else if (campo.tipo === "select") {
       control = (
         <select value={valor} onChange={onChange} className={CONTROLE}>

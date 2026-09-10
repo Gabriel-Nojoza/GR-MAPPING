@@ -9,7 +9,7 @@ import type { RecursoEng } from "@/lib/api";
  * acrescentar uma entrada — nenhuma migração de banco é necessária.
  */
 
-export type CampoTipo = "texto" | "numero" | "moeda" | "textarea" | "data" | "select" | "obra";
+export type CampoTipo = "texto" | "numero" | "moeda" | "textarea" | "data" | "select" | "obra" | "local";
 
 export type CampoEng = {
   key: string;
@@ -70,7 +70,7 @@ export const MODULOS: Record<string, ModuloEng> = {
     nomePlaceholder: "Ex: Adutora Setor Norte",
     campos: [
       { key: "cliente", label: "Cliente", tipo: "texto", col: 1 },
-      { key: "localizacao", label: "Localização / cidade", tipo: "texto", col: 2 },
+      { key: "localizacao", label: "Localização / cidade", tipo: "local", col: 2 },
       { key: "status", label: "Status", tipo: "select", col: 1, opcoes: ["Planejamento", "Em andamento", "Paralisada", "Concluída"] },
       { key: "data_inicio", label: "Início", tipo: "data", col: 1 },
       { key: "previsao_termino", label: "Previsão de término", tipo: "data", col: 1 },

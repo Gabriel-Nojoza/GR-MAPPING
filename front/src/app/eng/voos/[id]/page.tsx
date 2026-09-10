@@ -16,6 +16,7 @@ export default function VooDetalhe() {
   const { id } = useParams<{ id: string }>();
   const [voo, setVoo] = useState<Voo | null>(null);
   const [maquinas, setMaquinas] = useState<RecursoEng[]>([]);
+  const [obras, setObras] = useState<RecursoEng[]>([]);
   const [maquinaSel, setMaquinaSel] = useState("");
   const [subindo, setSubindo] = useState(false);
   const [aviso, setAviso] = useState("");
@@ -27,8 +28,9 @@ export default function VooDetalhe() {
     try {
       const v = await getVoo(id);
       setVoo(v);
-      const m = await getRecursosEng("equipamento");
+      const [m, o] = await Promise.all([getRecursosEng("equipamento"), getRecursosEng("obra")]);
       setMaquinas(m);
+      setObras(o);
       setMaquinaSel((atual) => atual || m[0]?.id || "");
     } catch (e) { setErro(e instanceof Error ? e.message : "Erro ao carregar o voo."); }
   }, [id]);
@@ -41,8 +43,13 @@ export default function VooDetalhe() {
   const centro = useMemo((): [number, number] | null => {
     const comGps = voo?.fotos?.find((f) => f.gps_lat != null);
     if (comGps) return [comGps.gps_lat!, comGps.gps_lon!];
+    // sem foto com GPS: cai na localização cadastrada da obra
+    const obra = obras.find((o) => o.id === voo?.obra_id);
+    const lat = Number(obra?.dados.localizacao_lat);
+    const lon = Number(obra?.dados.localizacao_lon);
+    if (obra && Number.isFinite(lat) && Number.isFinite(lon) && (lat || lon)) return [lat, lon];
     return null;
-  }, [voo]);
+  }, [voo, obras]);
 
   const pontosMaquinas = (voo?.deteccoes ?? []).flatMap((d) =>
     d.lat != null && d.lon != null
