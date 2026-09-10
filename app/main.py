@@ -39,6 +39,7 @@ from app import db, ramos
 from app.metadata import read_photo_metadata, PhotoMetadata, dados_foto_voo, gps_de_video
 from app import qr as leitor_qr
 from app import deteccao_pessoas as detector_pessoas
+from app import pessoas_gemini as contador_gemini
 from app.gsd import compute_gsd
 from app.area import area_do_poligono
 from app.ia_projeto import (
@@ -1668,11 +1669,20 @@ def enviar_fotos_voo(voo_id: str, fotos: list[UploadFile] = File(...),
             ja_detectadas.add(mid)
             qrs_lidos += 1
 
-        # contagem de pessoas por cor de capacete via YOLO (best-effort).
-        # Pode desligar com CONTAGEM_PESSOAS=off (ex.: pra acelerar upload).
-        if os.getenv("CONTAGEM_PESSOAS", "on").strip().lower() != "off":
+        # contagem de pessoas por cor de capacete (best-effort).
+        # CONTAGEM_PESSOAS = gemini (padrão) | yolo | off
+        modo_contagem = os.getenv("CONTAGEM_PESSOAS", "gemini").strip().lower()
+        if modo_contagem != "off":
+            contagem = {}
             try:
-                contagem = detector_pessoas.contar_pessoas(caminho)
+                if modo_contagem == "yolo":
+                    contagem = detector_pessoas.contar_pessoas(caminho)
+                elif contador_gemini.disponivel():
+                    contagem = contador_gemini.contar_pessoas(caminho)
+                    if not contagem and detector_pessoas.disponivel():
+                        contagem = detector_pessoas.contar_pessoas(caminho)  # reserva
+                else:
+                    contagem = detector_pessoas.contar_pessoas(caminho)
             except Exception:
                 contagem = {}
             if contagem:
