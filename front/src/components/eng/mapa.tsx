@@ -70,8 +70,13 @@ export function Mapa({
       }).addTo(grupo);
     });
     pontos.forEach((p) => {
+      const r = p.raio ?? 7;
+      // halo pra destacar os pontos maiores (máquinas) sobre o satélite
+      if (r >= 8) {
+        leaflet.circleMarker([p.lat, p.lon], { radius: r + 5, color: p.cor ?? "#2563eb", weight: 2, opacity: 0.5, fill: false }).addTo(grupo);
+      }
       const m = leaflet.circleMarker([p.lat, p.lon], {
-        radius: p.raio ?? 7, color: "#fff", weight: 2, fillColor: p.cor ?? "#2563eb", fillOpacity: 1,
+        radius: r, color: "#fff", weight: r >= 8 ? 3 : 2, fillColor: p.cor ?? "#2563eb", fillOpacity: 1,
       }).addTo(grupo);
       if (p.titulo) m.bindTooltip(p.titulo);
     });

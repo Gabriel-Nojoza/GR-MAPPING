@@ -46,18 +46,21 @@ export default function VooDetalhe() {
 
   const pontosMaquinas = (voo?.deteccoes ?? []).flatMap((d) =>
     d.lat != null && d.lon != null
-      ? [{ lat: d.lat, lon: d.lon, cor: d.status_maquina === "parada" ? "#ef4444" : "#2563eb", titulo: maqNome.get(d.maquina_id) ?? "Máquina" }]
+      ? [{ lat: d.lat, lon: d.lon, cor: d.status_maquina === "parada" ? "#ef4444" : "#2563eb", titulo: maqNome.get(d.maquina_id) ?? "Máquina", raio: 8 }]
       : [],
   );
-  // fotos com GPS que não têm máquina identificada — mostra um ponto cinza
-  // discreto, só pra confirmar onde a foto foi tirada (senão o mapa centraliza
-  // ali mas não deixa nada marcado, o que confunde).
+  const perto = (a: number, b: number) => Math.abs(a - b) < 0.0002; // ~20 m
+  // fotos com GPS que NÃO geraram máquina — ponto cinza discreto, só pra
+  // confirmar onde a foto foi tirada. Se a foto coincide com uma máquina
+  // marcada, não mostra o cinza (senão fica por cima do azul).
   const pontosFotos = (voo?.fotos ?? []).flatMap((f) =>
     f.gps_lat != null && f.gps_lon != null
+      && !pontosMaquinas.some((m) => perto(m.lat, f.gps_lat!) && perto(m.lon, f.gps_lon!))
       ? [{ lat: f.gps_lat, lon: f.gps_lon, cor: "#94a3b8", raio: 5, titulo: `Foto: ${f.nome_arquivo}` }]
       : [],
   );
-  const pontos = [...pontosMaquinas, ...pontosFotos];
+  // fotos primeiro, máquinas por cima
+  const pontos = [...pontosFotos, ...pontosMaquinas];
 
   async function upload(files: FileList | null) {
     if (!files?.length) return;
