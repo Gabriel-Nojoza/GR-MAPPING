@@ -42,15 +42,15 @@ const OPCIONAIS = new Set(["eng_operadores", "eng_custos"]);
 export function EngenhariaSidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  // por padrão mostra tudo (evita sumir o item por 1 frame); some assim que
-  // a config real da empresa chega e a flag estiver desligada
+  // começa SÓ com os itens fixos (Operadores/Custos ficam de fora até a
+  // config da empresa confirmar que estão ligados) — evita o "pisca"
   const [sidebar, setSidebar] = useState<string[] | null>(null);
 
   useEffect(() => {
-    getRamoConfig().then((c) => setSidebar(c.sidebar)).catch(() => {});
+    getRamoConfig().then((c) => setSidebar(c.sidebar)).catch(() => setSidebar([]));
   }, []);
 
-  const itens = ITEMS.filter((item) => !OPCIONAIS.has(item.chave) || !sidebar || sidebar.includes(item.chave));
+  const itens = ITEMS.filter((item) => !OPCIONAIS.has(item.chave) || (sidebar?.includes(item.chave) ?? false));
 
   function sair() {
     sessionStorage.removeItem("medicao-terreno:acesso");

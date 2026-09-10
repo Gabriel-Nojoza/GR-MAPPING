@@ -45,19 +45,40 @@ export function CampoLocal({
   const [sugestoes, setSugestoes] = useState<Sugestao[]>([]);
   const [aberto, setAberto] = useState(false);
   const [buscando, setBuscando] = useState(false);
+  const [coordFixa, setCoordFixa] = useState<{ lat: number; lon: number } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => { setTexto(valor); }, [valor]);
+  useEffect(() => { setTexto(valor); setCoordFixa(parseCoord(valor)); }, [valor]);
 
-  const coord = parseCoord(texto);
+  const coord = coordFixa ?? parseCoord(texto);
 
   function digitou(v: string) {
     setTexto(v);
     const c = parseCoord(v);
+    setCoordFixa(c);
     onChange(v, c?.lat ?? null, c?.lon ?? null);
     if (timer.current) clearTimeout(timer.current);
-    if (c || v.trim().length < 3) { setSugestoes([]); setAberto(false); return; }
-    timer.current = setTimeout(() => void buscar(v), 450);
+    setSugestoes([]); setAberto(false);
+    if (c) { timer.current = setTimeout(() => void reverso(c), 500); return; }
+    if (v.trim().length >= 3) timer.current = setTimeout(() => void buscar(v), 450);
+  }
+
+  // coordenada -> nome da rua (Nominatim reverse)
+  async function reverso(c: { lat: number; lon: number }) {
+    try {
+      setBuscando(true);
+      const r = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&zoom=18&lat=${c.lat}&lon=${c.lon}`,
+        { headers: { "Accept-Language": "pt-BR" } },
+      );
+      const d = await r.json();
+      if (d?.display_name) {
+        setTexto(d.display_name);
+        setCoordFixa(c);
+        onChange(d.display_name, c.lat, c.lon);
+      }
+    } catch { /* silencioso */ }
+    finally { setBuscando(false); }
   }
 
   async function buscar(q: string) {
@@ -78,6 +99,7 @@ export function CampoLocal({
 
   function escolher(s: Sugestao) {
     setTexto(s.nome);
+    setCoordFixa({ lat: s.lat, lon: s.lon });
     onChange(s.nome, s.lat, s.lon);
     setAberto(false);
   }
