@@ -67,6 +67,7 @@ def _bytes_reduzidos(caminho: Path) -> bytes:
 def contar_pessoas(caminho: str | Path) -> dict[str, int]:
     """{"Branco": 3, "Sem capacete": 1, ...} — total = soma. {} se não deu."""
     if not disponivel():
+        print("[pessoas_gemini] GEMINI_API_KEY ausente, pulando")
         return {}
     try:
         client = genai.Client(api_key=os.environ["GEMINI_API_KEY"].strip())
@@ -78,9 +79,21 @@ def contar_pessoas(caminho: str | Path) -> dict[str, int]:
             ],
             config=types.GenerateContentConfig(response_mime_type="application/json", temperature=0),
         )
-        obj = json.loads((resp.text or "{}").strip())
-    except Exception:
+        bruto = (resp.text or "").strip()
+    except Exception as e:
+        print(f"[pessoas_gemini] erro na chamada ({type(e).__name__}): {e}")
         return {}
+
+    try:
+        obj = json.loads(bruto)
+    except ValueError:
+        # às vezes vem com ```json ... ``` em volta mesmo pedindo json puro
+        limpo = bruto.strip("`").removeprefix("json").strip() if bruto.strip("`") else bruto
+        try:
+            obj = json.loads(limpo)
+        except ValueError:
+            print(f"[pessoas_gemini] resposta não é JSON válido: {bruto[:300]!r}")
+            return {}
 
     por_cor = obj.get("por_cor") or {}
     saida: dict[str, int] = {}

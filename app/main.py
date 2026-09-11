@@ -1763,11 +1763,14 @@ def _processar_fotos_voo(voo_id: str, empresa_id: str | None,
                 if modo_contagem == "gemini" and contador_gemini.disponivel():
                     contagem = contador_gemini.contar_pessoas(caminho)
                     if not contagem and detector_pessoas.disponivel():
+                        print(f"[pessoas] gemini não achou nada em {caminho.name}, tentando yolo")
                         contagem = detector_pessoas.contar_pessoas(caminho)
                 else:
                     contagem = detector_pessoas.contar_pessoas(caminho)
-            except Exception:
+            except Exception as e:
+                print(f"[pessoas] erro contando {caminho.name}: {type(e).__name__}: {e}")
                 contagem = {}
+            print(f"[pessoas] {caminho.name} -> {contagem or 'nada encontrado'}")
             if contagem:
                 db.marcar_foto_pessoas(foto_id, json.dumps(contagem, ensure_ascii=False))
 
