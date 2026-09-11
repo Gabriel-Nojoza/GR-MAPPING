@@ -55,12 +55,14 @@ export default function VooDetalhe() {
     return null;
   }, [voo, obras]);
 
-  // contorno do terreno da obra (se foi traçado), fechado pra ficar um polígono
+  // contorno do terreno da obra (se foi traçado). Com 3+ pontos fecha o
+  // polígono (volta pro início); com 2, mostra só a linha marcada.
   const contornoObra = useMemo((): [number, number][] | null => {
     const obra = obras.find((o) => o.id === voo?.obra_id);
     try {
       const p = JSON.parse(obra?.dados.contorno || "[]") as [number, number][];
-      return Array.isArray(p) && p.length >= 3 ? [...p, p[0]] : null;
+      if (!Array.isArray(p) || p.length < 2) return null;
+      return p.length >= 3 ? [...p, p[0]] : p;
     } catch { return null; }
   }, [voo, obras]);
 
@@ -84,14 +86,19 @@ export default function VooDetalhe() {
 
   async function salvarContorno() {
     if (!obraAtual) return;
+    if (pontosContorno.length < 2) {
+      setErro("Marque pelo menos 2 pontos no mapa antes de salvar.");
+      return;
+    }
     try {
       setSalvandoContorno(true); setErro("");
       await atualizarRecursoEng("obra", obraAtual.id, {
         nome: obraAtual.nome,
-        dados: { ...obraAtual.dados, contorno: pontosContorno.length >= 3 ? JSON.stringify(pontosContorno) : "" },
+        dados: { ...obraAtual.dados, contorno: JSON.stringify(pontosContorno) },
       });
       setEditandoContorno(false);
       setPontosContorno([]);
+      setAviso("Contorno da obra salvo.");
       await carregar();
     } catch (e) { setErro(e instanceof Error ? e.message : "Não foi possível salvar o contorno."); }
     finally { setSalvandoContorno(false); }

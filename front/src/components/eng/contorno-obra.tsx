@@ -37,11 +37,12 @@ export function ContornoObra({
       : null;
 
   async function salvar() {
+    if (pontos.length < 2) { setErro("Marque pelo menos 2 pontos no mapa antes de salvar."); return; }
     try {
       setSalvando(true); setErro("");
       const r = await atualizarRecursoEng("obra", obra.id, {
         nome: obra.nome,
-        dados: { ...obra.dados, contorno: pontos.length >= 3 ? JSON.stringify(pontos) : "" },
+        dados: { ...obra.dados, contorno: JSON.stringify(pontos) },
       });
       onSalvo(r);
       onFechar();
@@ -81,8 +82,8 @@ export function ContornoObra({
             <Button onClick={salvar} disabled={salvando}><Save size={15} /> {salvando ? "Salvando..." : "Salvar contorno"}</Button>
           </div>
         </div>
-        {pontos.length > 0 && pontos.length < 3 && (
-          <p className="mt-2 text-xs text-amber-600">Marque pelo menos 3 pontos pra formar um contorno.</p>
+        {pontos.length === 1 && (
+          <p className="mt-2 text-xs text-amber-600">Marque mais um ponto pelo menos pra formar uma linha.</p>
         )}
         {erro && <p className="mt-2 text-sm text-red-600">{erro}</p>}
       </div>
