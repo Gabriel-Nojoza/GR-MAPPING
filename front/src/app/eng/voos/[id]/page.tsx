@@ -196,8 +196,17 @@ export default function VooDetalhe() {
             center={centro}
             zoom={centro ? 17 : 4}
             busca
-            pontos={editandoContorno ? [] : pontos}
+            pontos={pontos}
             linha={editandoContorno ? pontosContorno : contornoObra}
+            segmentos={
+              editandoContorno && pontosContorno.length >= 3
+                ? [{
+                    a: { lat: pontosContorno[pontosContorno.length - 1][1], lon: pontosContorno[pontosContorno.length - 1][0] },
+                    b: { lat: pontosContorno[0][1], lon: pontosContorno[0][0] },
+                    cor: "#10b981", tracejado: true,
+                  }]
+                : []
+            }
             linhaEditavel={editandoContorno}
             onLinhaChange={setPontosContorno}
             onClique={marcar}
