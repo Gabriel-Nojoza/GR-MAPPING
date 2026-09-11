@@ -33,9 +33,12 @@ _CORES = ["Branco", "Amarelo", "Azul", "Verde", "Vermelho", "Laranja", "Sem capa
 _PROMPT = (
     "A imagem é de um canteiro de obras (pode ser vista aérea de drone). "
     "Conte quantas PESSOAS aparecem e, para cada uma, a cor do capacete na cabeça. "
-    f"Cores possíveis: {', '.join(_CORES[:-1])}. Se não estiver de capacete ou não der pra ver, "
-    "conte em \"Sem capacete\". NÃO conte cone, placa, tambor, colete ou balde como capacete — "
-    "capacete fica na cabeça de uma pessoa. "
+    f"Cores possíveis: {', '.join(_CORES[:-1])}. "
+    "ATENÇÃO: capacete AZUL, visto de cima, contra fundo escuro (terra, vala, sombra), costuma ficar "
+    "escuro e parecer 'sem capacete' à primeira vista — olhe com cuidado o formato arredondado e o "
+    "brilho/reflexo típico de capacete antes de classificar como 'Sem capacete'. Só use 'Sem capacete' "
+    "quando tiver certeza de que não há nada na cabeça (cabelo ou couro cabeludo visíveis). "
+    "NÃO conte cone, placa, tambor, colete ou balde como capacete — capacete fica na cabeça de uma pessoa. "
     "Responda SOMENTE um JSON neste formato exato, sem texto antes ou depois:\n"
     '{"total": <int>, "por_cor": {"Branco": <int>, "Amarelo": <int>, "Azul": <int>, '
     '"Verde": <int>, "Vermelho": <int>, "Laranja": <int>, "Sem capacete": <int>}}\n'
