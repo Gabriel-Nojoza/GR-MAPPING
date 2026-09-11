@@ -46,8 +46,37 @@ export function DashboardEng() {
     { icon: Ruler, label: "Avanço total", valor: `${d.avanco_total_m} m`, nota: "somando todos os dias" },
   ];
 
-  const porDia = d.dias.slice(-14).map((x) => ({ dia: new Date(x.data + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }), metros: x.avanco_m }));
   const chaveMes = new Date().toISOString().slice(0, 7);
+
+  // atividade real dos últimos 14 dias (voos feitos), não só os dias com
+  // par manhã+tarde — assim o gráfico quase nunca fica vazio
+  const atividade: { dia: string; voos: number; hoje: boolean }[] = [];
+  for (let i = 13; i >= 0; i--) {
+    const dt = new Date();
+    dt.setDate(dt.getDate() - i);
+    const chave = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+    const eventos = d.calendario[chave] ?? [];
+    atividade.push({
+      dia: dt.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
+      voos: eventos.reduce((s, e) => s + e.turnos.length, 0),
+      hoje: i === 0,
+    });
+  }
+
+  // situação por obra: cruza cadastro + avanço acumulado + pessoas do último voo
+  const metrosPorObra = new Map(d.por_obra.map((o) => [o.obra, o.metros]));
+  const voosPorObra = new Map<string, number>();
+  for (const eventos of Object.values(d.calendario)) {
+    for (const ev of eventos) voosPorObra.set(ev.obra, (voosPorObra.get(ev.obra) ?? 0) + ev.turnos.length);
+  }
+  const situacaoObras = obras.map((o) => ({
+    id: o.id,
+    nome: o.nome,
+    status: o.dados.status || "—",
+    voos: voosPorObra.get(o.nome) ?? 0,
+    metros: metrosPorObra.get(o.nome),
+    pessoas: pessoas.find((p) => p.obra_id === o.id)?.total_estimado,
+  }));
 
   return (
     <div className="mt-6 space-y-4">
@@ -64,40 +93,44 @@ export function DashboardEng() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <h2 className="text-sm font-medium text-slate-600">Avanço por dia (últimos 14)</h2>
-          <div className="mt-3 h-60">
-            {porDia.length === 0 ? (
-              <div className="grid h-full place-items-center text-sm text-slate-400">Sem dias com 2 voos ainda</div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={porDia}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="dia" fontSize={11} stroke="#94a3b8" />
-                  <YAxis fontSize={11} stroke="#94a3b8" tickFormatter={(v) => `${v}m`} />
-                  <Tooltip formatter={(v) => `${Number(v)} m`} />
-                  <Bar dataKey="metros" name="Avanço" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
+          <h2 className="text-sm font-medium text-slate-600">Atividade — voos por dia (últimos 14)</h2>
+          <p className="mt-0.5 text-xs text-slate-400">Quantos voos foram enviados a cada dia, mesmo sem par manhã/tarde ainda</p>
+          <div className="mt-3 h-56">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={atividade}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" vertical={false} />
+                <XAxis dataKey="dia" fontSize={11} stroke="#94a3b8" interval={1} />
+                <YAxis fontSize={11} stroke="#94a3b8" allowDecimals={false} width={24} />
+                <Tooltip formatter={(v) => [`${Number(v)} voo(s)`, "Voos"]} cursor={{ fill: "#f1f5f9" }} />
+                <Bar dataKey="voos" radius={[5, 5, 0, 0]} maxBarSize={22}>
+                  {atividade.map((a, i) => <Cell key={i} fill={a.hoje ? "#4f46e5" : "#c7d2fe"} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </Card>
 
-        <Card>
-          <h2 className="text-sm font-medium text-slate-600">Avanço acumulado por obra</h2>
-          <div className="mt-3 h-60">
-            {d.por_obra.length === 0 ? (
-              <div className="grid h-full place-items-center text-sm text-slate-400">Sem dados ainda</div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={d.por_obra} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis type="number" fontSize={11} stroke="#94a3b8" />
-                  <YAxis type="category" dataKey="obra" fontSize={11} stroke="#94a3b8" width={130} />
-                  <Tooltip formatter={(v) => `${Number(v)} m`} />
-                  <Bar dataKey="metros" name="Metros" fill="#4f46e5" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
+        <Card className="p-0">
+          <div className="border-b border-slate-100 p-4 pb-3">
+            <h2 className="text-sm font-medium text-slate-600">Situação por obra</h2>
+            <p className="mt-0.5 text-xs text-slate-400">Voos, avanço acumulado e pessoas vistas no último voo</p>
+          </div>
+          <div className="max-h-64 divide-y divide-slate-50 overflow-y-auto">
+            {situacaoObras.length === 0 ? (
+              <p className="p-5 text-center text-sm text-slate-400">Nenhuma obra cadastrada ainda.</p>
+            ) : situacaoObras.map((o) => (
+              <div key={o.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-slate-700">{o.nome}</p>
+                  <span className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_COR[o.status] ?? "bg-slate-100 text-slate-500"}`}>{o.status}</span>
+                </div>
+                <div className="flex shrink-0 items-center gap-4 text-right text-xs text-slate-500">
+                  <span className="flex items-center gap-1"><Plane size={12} className="text-slate-400" /> {o.voos}</span>
+                  <span className="flex items-center gap-1"><Ruler size={12} className="text-slate-400" /> {o.metros != null ? `${o.metros} m` : "—"}</span>
+                  <span className="flex items-center gap-1"><Users size={12} className="text-slate-400" /> {o.pessoas != null ? `~${o.pessoas}` : "—"}</span>
+                </div>
+              </div>
+            ))}
           </div>
         </Card>
       </div>
