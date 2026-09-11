@@ -25,7 +25,7 @@ except ImportError:
     types = None
     Image = None
 
-MODELO = os.getenv("GEMINI_MODELO_VISAO", "gemini-2.5-flash")
+MODELO = os.getenv("GEMINI_MODELO_VISAO", "gemini-3.6-flash")
 _LADO_MAX = 1568  # o Gemini já reduz internamente; mandar menor economiza banda/token
 
 _CORES = ["Branco", "Amarelo", "Azul", "Verde", "Vermelho", "Laranja", "Sem capacete"]
