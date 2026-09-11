@@ -1196,6 +1196,15 @@ def obter_recurso_eng(id_: str) -> sqlite3.Row | None:
         return conn.execute("SELECT * FROM recursos_eng WHERE id = ?", (id_,)).fetchone()
 
 
+def atualizar_recurso_eng(id_: str, nome: str, dados_json: str | None) -> bool:
+    with _conectar() as conn:
+        cur = conn.execute(
+            "UPDATE recursos_eng SET nome = ?, dados_json = ? WHERE id = ?",
+            (nome, dados_json, id_),
+        )
+        return cur.rowcount > 0
+
+
 def atualizar_foto_recurso_eng(id_: str, nome: str, mime: str | None) -> None:
     with _conectar() as conn:
         conn.execute("UPDATE recursos_eng SET foto_nome = ?, foto_mime = ? WHERE id = ?", (nome, mime, id_))

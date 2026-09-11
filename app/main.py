@@ -1217,6 +1217,21 @@ def criar_recurso_eng(tipo: str, dados: RecursoEngDados,
     return _recurso_eng_resposta(db.obter_recurso_eng(identificador))
 
 
+@app.patch("/eng/recursos/{tipo}/{recurso_id}")
+def atualizar_recurso_eng(tipo: str, recurso_id: str, dados: RecursoEngDados,
+                          contexto: dict | None = Depends(contexto_usuario)):
+    _valida_tipo_recurso(tipo)
+    if db.obter_recurso_eng(recurso_id) is None:
+        raise HTTPException(status_code=404, detail="registro não encontrado")
+    nome = (dados.nome or "").strip()
+    if not nome:
+        raise HTTPException(status_code=400, detail="informe o nome / identificação do registro")
+    extras = {k: v for k, v in (dados.dados or {}).items() if v not in (None, "")}
+    dados_json = json.dumps(extras, ensure_ascii=False) if extras else None
+    db.atualizar_recurso_eng(recurso_id, nome, dados_json)
+    return _recurso_eng_resposta(db.obter_recurso_eng(recurso_id))
+
+
 @app.post("/eng/recursos/{tipo}/{recurso_id}/foto")
 def enviar_foto_recurso_eng(tipo: str, recurso_id: str, foto: UploadFile = File(...)):
     _valida_tipo_recurso(tipo)

@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ImagePlus, ImageIcon, Plus, QrCode, Search, Trash2 } from "lucide-react";
+import { Hexagon, ImagePlus, ImageIcon, Plus, QrCode, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EtiquetaQr } from "@/components/eng/etiqueta-qr";
 import { CampoLocal } from "@/components/eng/campo-local";
+import { ContornoObra } from "@/components/eng/contorno-obra";
 import {
   criarRecursoEng, enviarFotoRecursoEng, excluirRecursoEng, getRecursosEng,
   recursoEngFotoUrl, type RecursoEng,
@@ -35,6 +36,7 @@ export function RecursoCrud({ tipo, topo }: { tipo: string; topo?: React.ReactNo
   const [dados, setDados] = useState<Record<string, string>>({});
   const [imagem, setImagem] = useState<File | null>(null);
   const [etiqueta, setEtiqueta] = useState<{ id: string; nome: string; numero: string } | null>(null);
+  const [contornoAlvo, setContornoAlvo] = useState<RecursoEng | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const usaObra = useMemo(() => modulo.campos.some((c) => c.tipo === "obra"), [modulo]);
@@ -255,6 +257,13 @@ export function RecursoCrud({ tipo, topo }: { tipo: string; topo?: React.ReactNo
                           title="Gerar etiqueta QR"
                         ><QrCode size={13} /> QR</button>
                       )}
+                      {modulo.temContorno && (
+                        <button
+                          onClick={() => setContornoAlvo(r)}
+                          className="flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+                          title="Traçar contorno da obra"
+                        ><Hexagon size={13} /> {r.dados.contorno ? "Contorno" : "Traçar contorno"}</button>
+                      )}
                     </div>
                   </td>
                   {modulo.colunas.map((c) => (
@@ -271,6 +280,13 @@ export function RecursoCrud({ tipo, topo }: { tipo: string; topo?: React.ReactNo
       </Card>
       {erro && <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</p>}
       {etiqueta && <EtiquetaQr {...etiqueta} onFechar={() => setEtiqueta(null)} />}
+      {contornoAlvo && (
+        <ContornoObra
+          obra={contornoAlvo}
+          onFechar={() => setContornoAlvo(null)}
+          onSalvo={() => void carregar()}
+        />
+      )}
     </div>
   );
 }

@@ -42,6 +42,7 @@ export type ModuloEng = {
   nomePlaceholder: string;
   imagemDestaque?: boolean;
   etiquetaQr?: boolean;
+  temContorno?: boolean;
   campos: CampoEng[];
   colunas: ColunaEng[];
   resumo: ResumoEng[];
@@ -68,6 +69,7 @@ export const MODULOS: Record<string, ModuloEng> = {
     descricao: "Cadastro e acompanhamento das obras da empresa.",
     nomeLabel: "Nome da obra",
     nomePlaceholder: "Ex: Adutora Setor Norte",
+    temContorno: true,
     campos: [
       { key: "cliente", label: "Cliente", tipo: "texto", col: 1 },
       { key: "localizacao", label: "Localização / cidade", tipo: "local", col: 2 },

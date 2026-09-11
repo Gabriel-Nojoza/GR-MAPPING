@@ -51,6 +51,15 @@ export default function VooDetalhe() {
     return null;
   }, [voo, obras]);
 
+  // contorno do terreno da obra (se foi traçado), fechado pra ficar um polígono
+  const contornoObra = useMemo((): [number, number][] | null => {
+    const obra = obras.find((o) => o.id === voo?.obra_id);
+    try {
+      const p = JSON.parse(obra?.dados.contorno || "[]") as [number, number][];
+      return Array.isArray(p) && p.length >= 3 ? [...p, p[0]] : null;
+    } catch { return null; }
+  }, [voo, obras]);
+
   const pontosMaquinas = (voo?.deteccoes ?? []).flatMap((d) =>
     d.lat != null && d.lon != null
       ? [{ lat: d.lat, lon: d.lon, cor: d.status_maquina === "parada" ? "#ef4444" : "#2563eb", titulo: maqNome.get(d.maquina_id) ?? "Máquina", raio: 8 }]
@@ -146,7 +155,7 @@ export default function VooDetalhe() {
 
       <div className="mt-6 grid gap-5 lg:grid-cols-[1fr_380px]">
         <Card className="p-3">
-          <Mapa center={centro} zoom={centro ? 17 : 4} busca pontos={pontos} onClique={marcar} altura="560px" />
+          <Mapa center={centro} zoom={centro ? 17 : 4} busca pontos={pontos} linha={contornoObra} onClique={marcar} altura="560px" />
           <p className="mt-2 text-xs text-slate-500">
             <span className="mr-3 inline-flex items-center gap-1"><span className="inline-block size-2.5 rounded-full bg-slate-400" /> foto sem máquina</span>
             <span className="mr-3 inline-flex items-center gap-1"><span className="inline-block size-2.5 rounded-full bg-blue-600" /> máquina em campo</span>
