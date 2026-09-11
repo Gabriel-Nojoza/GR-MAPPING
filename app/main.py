@@ -1735,7 +1735,7 @@ def _processar_fotos_voo(voo_id: str, empresa_id: str | None,
     frente = _frente_da_obra(voo["obra_id"], None)
     coords_frente = _linha_da_frente(frente["geojson"]) if frente else []
     ja_detectadas = {d["maquina_id"] for d in db.listar_deteccoes(voo_id) if d["metodo"] == "qr"}
-    modo_contagem = os.getenv("CONTAGEM_PESSOAS", "yolo").strip().lower()
+    modo_contagem = os.getenv("CONTAGEM_PESSOAS", "gemini").strip().lower()
 
     for tipo, foto_id, caminho_str, gps_lat, gps_lon in pendentes:
         caminho = Path(caminho_str)
