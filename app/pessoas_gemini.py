@@ -38,6 +38,9 @@ _PROMPT = (
     "escuro e parecer 'sem capacete' à primeira vista — olhe com cuidado o formato arredondado e o "
     "brilho/reflexo típico de capacete antes de classificar como 'Sem capacete'. Só use 'Sem capacete' "
     "quando tiver certeza de que não há nada na cabeça (cabelo ou couro cabeludo visíveis). "
+    "Preciso que faça a contagem certa sem erros, porque tem materiais que são da mesma cor do capacete "
+    "(colete, balde, cone, tecido, plástico) — diferencie o capacete pelo MATERIAL e formato (plástico rígido, "
+    "casco arredondado com aba), não só pela cor. "
     "NÃO conte cone, placa, tambor, colete ou balde como capacete — capacete fica na cabeça de uma pessoa. "
     "Responda SOMENTE um JSON neste formato exato, sem texto antes ou depois:\n"
     '{"total": <int>, "por_cor": {"Branco": <int>, "Amarelo": <int>, "Azul": <int>, '
