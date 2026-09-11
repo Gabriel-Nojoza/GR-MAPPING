@@ -41,6 +41,12 @@ _PROMPT = (
     "Preciso que faça a contagem certa sem erros, porque tem materiais que são da mesma cor do capacete "
     "(colete, balde, cone, tecido, plástico) — diferencie o capacete pelo MATERIAL e formato (plástico rígido, "
     "casco arredondado com aba), não só pela cor. "
+    "Se houver fio de poste, cabo ou qualquer linha cruzando por cima da pessoa na imagem, ignore essa "
+    "sobreposição e olhe com atenção redobrada a cor do capacete por baixo do fio — não deixe o fio confundir "
+    "a cor nem esconder a pessoa. "
+    "Se o operador estiver dentro de um buraco, vala ou cava (só cabeça/tronco visível, parte do corpo cortada "
+    "pela borda do buraco), preste atenção redobrada: ele conta como pessoa normalmente e a cor do capacete deve "
+    "ser identificada mesmo com iluminação mais escura ali dentro. "
     "NÃO conte cone, placa, tambor, colete ou balde como capacete — capacete fica na cabeça de uma pessoa. "
     "Responda SOMENTE um JSON neste formato exato, sem texto antes ou depois:\n"
     '{"total": <int>, "por_cor": {"Branco": <int>, "Amarelo": <int>, "Azul": <int>, '
