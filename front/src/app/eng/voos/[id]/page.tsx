@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ImagePlus, MapPin, PlayCircle, Trash2, Upload, X } from "lucide-react";
+import { ArrowLeft, Hexagon, ImagePlus, MapPin, PlayCircle, Save, Trash2, Undo2, Upload, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Mapa } from "@/components/eng/mapa";
 import {
-  atualizarDeteccao, enviarFotosVoo, excluirDeteccao, excluirFotoVoo, fotoVooUrl,
+  atualizarDeteccao, atualizarRecursoEng, enviarFotosVoo, excluirDeteccao, excluirFotoVoo, fotoVooUrl,
   getRecursosEng, getVoo,
   type Deteccao, type RecursoEng, type Voo,
 } from "@/lib/api";
@@ -22,6 +23,9 @@ export default function VooDetalhe() {
   const [aviso, setAviso] = useState("");
   const [erro, setErro] = useState("");
   const [scanPreviews, setScanPreviews] = useState<{ url: string; video: boolean }[]>([]);
+  const [editandoContorno, setEditandoContorno] = useState(false);
+  const [pontosContorno, setPontosContorno] = useState<[number, number][]>([]);
+  const [salvandoContorno, setSalvandoContorno] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const carregar = useCallback(async () => {
@@ -59,6 +63,39 @@ export default function VooDetalhe() {
       return Array.isArray(p) && p.length >= 3 ? [...p, p[0]] : null;
     } catch { return null; }
   }, [voo, obras]);
+
+  const obraAtual = obras.find((o) => o.id === voo?.obra_id) ?? null;
+
+  function iniciarContorno() {
+    let atual: [number, number][] = [];
+    try {
+      const p = JSON.parse(obraAtual?.dados.contorno || "[]");
+      if (Array.isArray(p)) atual = p;
+    } catch { /* começa vazio */ }
+    setPontosContorno(atual);
+    setEditandoContorno(true);
+    setAviso("");
+  }
+
+  function cancelarContorno() {
+    setEditandoContorno(false);
+    setPontosContorno([]);
+  }
+
+  async function salvarContorno() {
+    if (!obraAtual) return;
+    try {
+      setSalvandoContorno(true); setErro("");
+      await atualizarRecursoEng("obra", obraAtual.id, {
+        nome: obraAtual.nome,
+        dados: { ...obraAtual.dados, contorno: pontosContorno.length >= 3 ? JSON.stringify(pontosContorno) : "" },
+      });
+      setEditandoContorno(false);
+      setPontosContorno([]);
+      await carregar();
+    } catch (e) { setErro(e instanceof Error ? e.message : "Não foi possível salvar o contorno."); }
+    finally { setSalvandoContorno(false); }
+  }
 
   const pontosMaquinas = (voo?.deteccoes ?? []).flatMap((d) =>
     d.lat != null && d.lon != null
@@ -155,15 +192,48 @@ export default function VooDetalhe() {
 
       <div className="mt-6 grid gap-5 lg:grid-cols-[1fr_380px]">
         <Card className="p-3">
-          <Mapa center={centro} zoom={centro ? 17 : 4} busca pontos={pontos} linha={contornoObra} onClique={marcar} altura="560px" />
-          <p className="mt-2 text-xs text-slate-500">
-            <span className="mr-3 inline-flex items-center gap-1"><span className="inline-block size-2.5 rounded-full bg-slate-400" /> foto sem máquina</span>
-            <span className="mr-3 inline-flex items-center gap-1"><span className="inline-block size-2.5 rounded-full bg-blue-600" /> máquina em campo</span>
-            <span className="inline-flex items-center gap-1"><span className="inline-block size-2.5 rounded-full bg-red-500" /> máquina parada</span>
-          </p>
-          <p className="mt-1 text-xs text-slate-500">
-            Fotos com QR + GPS posicionam a máquina sozinhas. Se alguma ficou &quot;sem posição&quot;, clique em <b>posicionar</b> ao lado e depois no mapa.
-          </p>
+          <Mapa
+            center={centro}
+            zoom={centro ? 17 : 4}
+            busca
+            pontos={editandoContorno ? [] : pontos}
+            linha={editandoContorno ? pontosContorno : contornoObra}
+            linhaEditavel={editandoContorno}
+            onLinhaChange={setPontosContorno}
+            onClique={marcar}
+            altura="560px"
+          />
+          {editandoContorno ? (
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-emerald-700">
+                Clica no mapa marcando os cantos do terreno. {pontosContorno.length} ponto(s).
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="secondary" onClick={() => setPontosContorno((p) => p.slice(0, -1))} disabled={!pontosContorno.length}><Undo2 size={14} /> Desfazer</Button>
+                <Button variant="secondary" onClick={() => setPontosContorno([])} disabled={!pontosContorno.length}><Trash2 size={14} /> Limpar</Button>
+                <Button variant="secondary" onClick={cancelarContorno}>Cancelar</Button>
+                <Button onClick={salvarContorno} disabled={salvandoContorno}><Save size={14} /> {salvandoContorno ? "Salvando..." : "Salvar contorno"}</Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <p className="mt-2 text-xs text-slate-500">
+                <span className="mr-3 inline-flex items-center gap-1"><span className="inline-block size-2.5 rounded-full bg-slate-400" /> foto sem máquina</span>
+                <span className="mr-3 inline-flex items-center gap-1"><span className="inline-block size-2.5 rounded-full bg-blue-600" /> máquina em campo</span>
+                <span className="inline-flex items-center gap-1"><span className="inline-block size-2.5 rounded-full bg-red-500" /> máquina parada</span>
+              </p>
+              <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-slate-500">
+                  Fotos com QR + GPS posicionam a máquina sozinhas. Se alguma ficou &quot;sem posição&quot;, clique em <b>posicionar</b> ao lado e depois no mapa.
+                </p>
+                {obraAtual && (
+                  <button onClick={iniciarContorno} className="flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100">
+                    <Hexagon size={13} /> {contornoObra ? "Editar contorno" : "Traçar contorno da obra"}
+                  </button>
+                )}
+              </div>
+            </>
+          )}
         </Card>
 
         <div className="space-y-4">
