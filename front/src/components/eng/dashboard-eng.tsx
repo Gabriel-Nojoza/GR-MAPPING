@@ -1,19 +1,31 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { HardHat, Joystick, Plane, Ruler, Truck } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { HardHat, Joystick, Plane, Ruler, Truck, Users } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { getEngDashboard, type EngDashboard } from "@/lib/api";
+import { getEngDashboard, getPessoasEmObra, getRecursosEng, type EngDashboard, type PessoasEmObra, type RecursoEng } from "@/lib/api";
 
 const DIAS_SEMANA = ["D", "S", "T", "Q", "Q", "S", "S"];
 const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+const STATUS_COR: Record<string, string> = {
+  "Planejamento": "bg-slate-100 text-slate-600",
+  "Em andamento": "bg-emerald-50 text-emerald-700",
+  "Paralisada": "bg-amber-50 text-amber-700",
+  "Concluída": "bg-indigo-50 text-primary",
+};
 
 export function DashboardEng() {
   const [d, setD] = useState<EngDashboard | null>(null);
+  const [obras, setObras] = useState<RecursoEng[]>([]);
+  const [pessoas, setPessoas] = useState<PessoasEmObra[]>([]);
   const [mes, setMes] = useState(() => new Date());
 
-  useEffect(() => { getEngDashboard().then(setD).catch(() => {}); }, []);
+  useEffect(() => {
+    getEngDashboard().then(setD).catch(() => {});
+    getRecursosEng("obra").then(setObras).catch(() => {});
+    getPessoasEmObra().then(setPessoas).catch(() => {});
+  }, []);
 
   const grade = useMemo(() => {
     const ano = mes.getFullYear(), m = mes.getMonth();

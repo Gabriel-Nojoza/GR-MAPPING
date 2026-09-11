@@ -1791,11 +1791,14 @@ def imagem_foto_voo(voo_id: str, foto_id: str, download: int = 0):
     caminho = next(iter(UPLOADS_DIR.glob(f"voo-{foto_id}.*")), None)
     if foto is None or caminho is None:
         raise HTTPException(status_code=404, detail="foto não encontrada")
-    headers = {}
-    if download:
-        nome = foto["nome_arquivo"] or caminho.name
-        headers["Content-Disposition"] = f'attachment; filename="{nome}"'
-    return Response(content=caminho.read_bytes(), media_type=foto["mime"] or "image/jpeg", headers=headers)
+    # FileResponse (não Response com bytes) pra suportar "Range" — sem isso o
+    # navegador tem que baixar o vídeo inteiro antes de tocar, o que trava/
+    # engasga no começo e impede de avançar o vídeo.
+    return FileResponse(
+        caminho,
+        media_type=foto["mime"] or "image/jpeg",
+        filename=(foto["nome_arquivo"] or caminho.name) if download else None,
+    )
 
 
 @app.delete("/eng/voos/{voo_id}/fotos/{foto_id}")
