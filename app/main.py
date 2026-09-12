@@ -44,6 +44,8 @@ from app import deteccao_pessoas as detector_pessoas
 from app import pessoas_gemini as contador_gemini
 from app.gsd import compute_gsd
 from app.area import area_do_poligono
+from app import kmz
+from app import progresso_linear
 from app.ia_projeto import (
     ETAPAS_EVOLUCAO,
     EXTENSAO_DURACAO_MAXIMA_S,
@@ -384,6 +386,8 @@ class FrenteDados(BaseModel):
     nome: str
     geojson: dict | None = None
     extensao_prevista_m: float = 0
+    diametro_mm: float | None = None
+    material: str | None = None
 
 
 class VooDados(BaseModel):
@@ -1273,19 +1277,8 @@ def excluir_recurso_eng(tipo: str, recurso_id: str):
 # ----------------------------------------------------------------------
 # monitoramento de produtividade por voo de drone (ramo engenharia)
 # ----------------------------------------------------------------------
-_R_TERRA = 6_371_000.0  # metros
-
-
-def _dist_m(lat1, lon1, lat2, lon2) -> float:
-    """Distância aproximada entre dois pontos GPS, em metros (haversine)."""
-    if None in (lat1, lon1, lat2, lon2):
-        return 0.0
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dp = math.radians(lat2 - lat1)
-    dl = math.radians(lon2 - lon1)
-    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
-    return 2 * _R_TERRA * math.asin(min(1.0, math.sqrt(a)))
-
+from app.geo import dist_m as _dist_m, linha_da_frente as _linha_da_frente, progressiva as _progressiva
+from app import geo
 
 _RAIO_MESMA_AREA_M = 60.0  # fotos com GPS a menos disso = mesma área da obra
 
@@ -1329,47 +1322,6 @@ def _contagem_automatica_pessoas(fotos: list[dict]) -> dict[str, int]:
         for cor in cores:
             total[cor] = total.get(cor, 0) + max(c.get(cor, 0) for c in contagens)
     return total
-
-
-def _linha_da_frente(geojson) -> list[tuple[float, float]]:
-    """Extrai a lista de (lon, lat) de um GeoJSON LineString (ou Feature com LineString)."""
-    if not geojson:
-        return []
-    try:
-        geo = json.loads(geojson) if isinstance(geojson, str) else geojson
-        if geo.get("type") == "Feature":
-            geo = geo.get("geometry", {})
-        if geo.get("type") == "LineString":
-            return [(float(c[0]), float(c[1])) for c in geo.get("coordinates", [])]
-    except (TypeError, ValueError, KeyError):
-        pass
-    return []
-
-
-def _progressiva(coords: list[tuple[float, float]], lat: float | None, lon: float | None) -> float | None:
-    """Posição (em metros do início) do ponto projetado sobre a linha da frente."""
-    if not coords or lat is None or lon is None or len(coords) < 2:
-        return None
-    melhor_dist = float("inf")
-    acumulado = 0.0
-    progressiva = 0.0
-    for (lon1, lat1), (lon2, lat2) in zip(coords, coords[1:]):
-        seg_m = _dist_m(lat1, lon1, lat2, lon2)
-        # projeta o ponto no segmento usando um plano local em metros
-        ax, ay = 0.0, 0.0
-        bx = _dist_m(lat1, lon1, lat1, lon2) * (1 if lon2 >= lon1 else -1)
-        by = _dist_m(lat1, lon1, lat2, lon1) * (1 if lat2 >= lat1 else -1)
-        px = _dist_m(lat1, lon1, lat1, lon) * (1 if lon >= lon1 else -1)
-        py = _dist_m(lat1, lon1, lat, lon1) * (1 if lat >= lat1 else -1)
-        seg2 = bx * bx + by * by
-        t = 0.0 if seg2 == 0 else max(0.0, min(1.0, ((px - ax) * bx + (py - ay) * by) / seg2))
-        cx, cy = ax + t * bx, ay + t * by
-        d = math.hypot(px - cx, py - cy)
-        if d < melhor_dist:
-            melhor_dist = d
-            progressiva = acumulado + t * seg_m
-        acumulado += seg_m
-    return round(progressiva, 1)
 
 
 def _frente_da_obra(obra_id: str, frente_id: str | None):
@@ -1429,17 +1381,22 @@ def _voo_resposta(linha) -> dict:
     return d
 
 
+def _frente_resposta(linha) -> dict:
+    item = dict(linha)
+    try:
+        item["geojson"] = json.loads(item["geojson"]) if item["geojson"] else None
+    except (TypeError, ValueError):
+        item["geojson"] = None
+    try:
+        item["estacas"] = json.loads(item.pop("estacas_json")) if item.get("estacas_json") else []
+    except (TypeError, ValueError):
+        item["estacas"] = []
+    return item
+
+
 @app.get("/eng/frentes")
 def listar_frentes(obra_id: str):
-    saida = []
-    for f in db.listar_frentes(obra_id):
-        item = dict(f)
-        try:
-            item["geojson"] = json.loads(item["geojson"]) if item["geojson"] else None
-        except (TypeError, ValueError):
-            item["geojson"] = None
-        saida.append(item)
-    return saida
+    return [_frente_resposta(f) for f in db.listar_frentes(obra_id)]
 
 
 @app.post("/eng/frentes")
@@ -1448,17 +1405,19 @@ def criar_frente(dados: FrenteDados, contexto: dict | None = Depends(contexto_us
     if not nome or not dados.obra_id:
         raise HTTPException(status_code=400, detail="informe a obra e o nome da frente")
     identificador = uuid.uuid4().hex
-    geo = json.dumps(dados.geojson, ensure_ascii=False) if dados.geojson else None
-    db.criar_frente(identificador, _empresa_do_contexto(contexto), dados.obra_id, nome, geo, max(0.0, dados.extensao_prevista_m))
-    return dict(db.obter_frente(identificador))
+    geojson_txt = json.dumps(dados.geojson, ensure_ascii=False) if dados.geojson else None
+    db.criar_frente(identificador, _empresa_do_contexto(contexto), dados.obra_id, nome, geojson_txt,
+                    max(0.0, dados.extensao_prevista_m), dados.diametro_mm, dados.material)
+    return _frente_resposta(db.obter_frente(identificador))
 
 
 @app.patch("/eng/frentes/{frente_id}")
 def atualizar_frente(frente_id: str, dados: FrenteDados):
     if db.obter_frente(frente_id) is None:
         raise HTTPException(status_code=404, detail="frente não encontrada")
-    geo = json.dumps(dados.geojson, ensure_ascii=False) if dados.geojson else None
-    db.atualizar_frente(frente_id, dados.nome.strip(), geo, max(0.0, dados.extensao_prevista_m))
+    geojson_txt = json.dumps(dados.geojson, ensure_ascii=False) if dados.geojson else None
+    db.atualizar_frente(frente_id, dados.nome.strip(), geojson_txt,
+                        max(0.0, dados.extensao_prevista_m), dados.diametro_mm, dados.material)
     return {"ok": True}
 
 
@@ -1467,6 +1426,63 @@ def excluir_frente(frente_id: str):
     if not db.excluir_frente(frente_id):
         raise HTTPException(status_code=404, detail="frente não encontrada")
     return {"ok": True}
+
+
+@app.post("/eng/obras/{obra_id}/rota/kmz")
+def importar_rota_kmz(obra_id: str, arquivo: UploadFile = File(...),
+                      substituir: bool = Form(True),
+                      contexto: dict | None = Depends(contexto_usuario)):
+    """Importa o traçado da obra (trechos + estacas) a partir de um KMZ/KML
+    exportado do Google Earth / My Maps. Por padrão substitui os trechos que
+    a obra já tinha."""
+    obra = db.obter_recurso_eng(obra_id)
+    if obra is None or obra["tipo"] != "obra":
+        raise HTTPException(status_code=404, detail="obra não encontrada")
+
+    nome_arquivo = (arquivo.filename or "").lower()
+    if not nome_arquivo.endswith((".kmz", ".kml")):
+        raise HTTPException(status_code=400, detail="envie um arquivo .kmz ou .kml")
+    dados = arquivo.file.read()
+    if not dados:
+        raise HTTPException(status_code=400, detail="arquivo vazio")
+    if len(dados) > 15 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="o arquivo deve ter no máximo 15 MB")
+    try:
+        trechos = kmz.parse_kmz_kml(dados)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"não foi possível ler o arquivo ({e})")
+    if not trechos:
+        raise HTTPException(status_code=400, detail="nenhum traçado (linha) foi encontrado no arquivo")
+
+    empresa_id = _empresa_do_contexto(contexto)
+    if substituir:
+        for f in db.listar_frentes(obra_id):
+            db.excluir_frente(f["id"])
+
+    extensao_total = 0.0
+    for t in trechos:
+        geojson_txt = json.dumps(
+            {"type": "LineString", "coordinates": [[lon, lat] for lon, lat in t.coordenadas]},
+            ensure_ascii=False,
+        )
+        estacas_txt = json.dumps([
+            {"codigo": e.codigo, "lat": e.lat, "lon": e.lon, "progressiva_m": e.progressiva_m,
+             "cota_tn": e.cota_tn, "cota_gi": e.cota_gi, "profundidade_m": e.profundidade_m}
+            for e in t.estacas
+        ], ensure_ascii=False) if t.estacas else None
+        db.criar_frente(uuid.uuid4().hex, empresa_id, obra_id, t.nome, geojson_txt,
+                        t.extensao_m, t.diametro_mm, t.material, estacas_txt)
+        extensao_total += t.extensao_m
+
+    return {"ok": True, "trechos_importados": len(trechos), "extensao_total_m": round(extensao_total, 1)}
+
+
+@app.get("/eng/obras/{obra_id}/avanco-linear")
+def avanco_linear_obra(obra_id: str, contexto: dict | None = Depends(contexto_usuario)):
+    obra = db.obter_recurso_eng(obra_id)
+    if obra is None or obra["tipo"] != "obra":
+        raise HTTPException(status_code=404, detail="obra não encontrada")
+    return progresso_linear.calcular_avanco_linear(obra_id)
 
 
 @app.get("/eng/voos")
@@ -1598,6 +1614,7 @@ def enviar_fotos_voo(voo_id: str, background_tasks: BackgroundTasks,
         raise HTTPException(status_code=404, detail="voo não encontrado")
 
     empresa_id = _empresa_do_contexto(contexto)
+    frentes_obra = [dict(f) for f in db.listar_frentes(voo["obra_id"])]
 
     TIPOS_IMAGEM = {"image/jpeg", "image/png", "image/webp"}
     EXT_IMAGEM = (".jpg", ".jpeg", ".png", ".webp")
@@ -1664,8 +1681,10 @@ def enviar_fotos_voo(voo_id: str, background_tasks: BackgroundTasks,
                 vmeta = gps_de_video(caminho)
             except Exception:
                 vmeta = {"gps_lat": None, "gps_lon": None, "altitude_m": None, "tirada_em": None}
+            posicao = geo.escolher_frente(frentes_obra, vmeta["gps_lat"], vmeta["gps_lon"])
             db.adicionar_foto_voo(foto_id, voo_id, nome_arquivo, mime_arquivo,
-                                  vmeta["gps_lat"], vmeta["gps_lon"], vmeta["altitude_m"], vmeta["tirada_em"])
+                                  vmeta["gps_lat"], vmeta["gps_lon"], vmeta["altitude_m"], vmeta["tirada_em"],
+                                  posicao[1] if posicao else None, posicao[0] if posicao else None)
             salvas += 1
             pendentes.append(("vid", foto_id, str(caminho), None, None))
             continue
@@ -1674,8 +1693,10 @@ def enviar_fotos_voo(voo_id: str, background_tasks: BackgroundTasks,
             meta = dados_foto_voo(caminho)
         except Exception:
             meta = {"gps_lat": None, "gps_lon": None, "altitude_m": None, "tirada_em": None}
+        posicao = geo.escolher_frente(frentes_obra, meta["gps_lat"], meta["gps_lon"])
         db.adicionar_foto_voo(foto_id, voo_id, nome_arquivo, mime_arquivo,
-                              meta["gps_lat"], meta["gps_lon"], meta["altitude_m"], meta["tirada_em"])
+                              meta["gps_lat"], meta["gps_lon"], meta["altitude_m"], meta["tirada_em"],
+                              posicao[1] if posicao else None, posicao[0] if posicao else None)
         salvas += 1
         pendentes.append(("img", foto_id, str(caminho), meta["gps_lat"], meta["gps_lon"]))
 

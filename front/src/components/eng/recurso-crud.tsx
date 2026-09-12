@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Hexagon, ImagePlus, ImageIcon, Plus, QrCode, Search, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Hexagon, ImagePlus, ImageIcon, Plus, QrCode, Route, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EtiquetaQr } from "@/components/eng/etiqueta-qr";
@@ -263,6 +264,13 @@ export function RecursoCrud({ tipo, topo }: { tipo: string; topo?: React.ReactNo
                           className="flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
                           title="Traçar contorno da obra"
                         ><Hexagon size={13} /> {r.dados.contorno ? "Contorno" : "Traçar contorno"}</button>
+                      )}
+                      {tipo === "obra" && (
+                        <Link
+                          href={`/eng/obras/${r.id}`}
+                          className="flex shrink-0 items-center gap-1 rounded-full bg-indigo-50 px-2 py-1 text-xs font-medium text-primary hover:bg-indigo-100"
+                          title="Ver progresso da obra"
+                        ><Route size={13} /> Progresso</Link>
                       )}
                     </div>
                   </td>

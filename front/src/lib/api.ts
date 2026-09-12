@@ -273,7 +273,11 @@ export async function excluirRecursoEng(tipo: string, id: string) { return finan
 export function recursoEngFotoUrl(tipo: string, id: string) { return `${API_URL}/eng/recursos/${tipo}/${id}/foto`; }
 
 // ---- monitoramento de produtividade por voo de drone --------------------
-export type Frente = { id: string; obra_id: string; nome: string; geojson: GeoLineString | null; extensao_prevista_m: number };
+export type Estaca = { codigo: string; lat: number; lon: number; progressiva_m: number | null; cota_tn: number | null; cota_gi: number | null; profundidade_m: number | null };
+export type Frente = {
+  id: string; obra_id: string; nome: string; geojson: GeoLineString | null; extensao_prevista_m: number;
+  diametro_mm?: number | null; material?: string | null; estacas?: Estaca[];
+};
 export type GeoLineString = { type: "LineString"; coordinates: [number, number][] };
 export type Voo = {
   id: string; criado_em: string; obra_id: string; data: string; turno: string; observacao?: string | null;
@@ -283,7 +287,7 @@ export type Voo = {
   fotos?: VooFoto[]; deteccoes?: Deteccao[];
   pessoas_por_cor?: Record<string, number>; pessoas_total_estimado?: number;
 };
-export type VooFoto = { id: string; nome_arquivo: string; mime?: string | null; gps_lat: number | null; gps_lon: number | null; altitude_m: number | null; tirada_em: string | null; tem_qr: number; contar_pessoas?: number; pessoas?: Record<string, number> | null };
+export type VooFoto = { id: string; nome_arquivo: string; mime?: string | null; gps_lat: number | null; gps_lon: number | null; altitude_m: number | null; tirada_em: string | null; tem_qr: number; contar_pessoas?: number; pessoas?: Record<string, number> | null; progressiva_m?: number | null; frente_id?: string | null };
 export type Deteccao = { id: string; voo_id: string; foto_id: string | null; maquina_id: string; frente_id: string | null; lat: number | null; lon: number | null; progressiva_m: number | null; metodo: string; status_maquina: string | null; foto_tirada_em?: string | null };
 export type Comparacao = {
   voo_a: Voo; voo_b: Voo;
@@ -297,9 +301,27 @@ export type Comparacao = {
 };
 
 export async function getFrentes(obraId: string) { return financeiroResposta(await fetch(`${API_URL}/eng/frentes?obra_id=${obraId}`, { headers: authHeaders(), cache: "no-store" })) as Promise<Frente[]>; }
-export async function criarFrente(d: { obra_id: string; nome: string; geojson?: GeoLineString | null; extensao_prevista_m?: number }) { return financeiroResposta(await fetch(`${API_URL}/eng/frentes`, { method: "POST", headers: authHeaders(), body: JSON.stringify(d) })) as Promise<Frente>; }
-export async function atualizarFrente(id: string, d: { obra_id: string; nome: string; geojson?: GeoLineString | null; extensao_prevista_m?: number }) { return financeiroResposta(await fetch(`${API_URL}/eng/frentes/${id}`, { method: "PATCH", headers: authHeaders(), body: JSON.stringify(d) })); }
+export async function criarFrente(d: { obra_id: string; nome: string; geojson?: GeoLineString | null; extensao_prevista_m?: number; diametro_mm?: number | null; material?: string | null }) { return financeiroResposta(await fetch(`${API_URL}/eng/frentes`, { method: "POST", headers: authHeaders(), body: JSON.stringify(d) })) as Promise<Frente>; }
+export async function atualizarFrente(id: string, d: { obra_id: string; nome: string; geojson?: GeoLineString | null; extensao_prevista_m?: number; diametro_mm?: number | null; material?: string | null }) { return financeiroResposta(await fetch(`${API_URL}/eng/frentes/${id}`, { method: "PATCH", headers: authHeaders(), body: JSON.stringify(d) })); }
 export async function excluirFrente(id: string) { return financeiroResposta(await fetch(`${API_URL}/eng/frentes/${id}`, { method: "DELETE" })); }
+export async function importarRotaKmz(obraId: string, arquivo: File) {
+  const form = new FormData();
+  form.append("arquivo", arquivo);
+  const token = sessionStorage.getItem("medicao-terreno:token");
+  return financeiroResposta(await fetch(`${API_URL}/eng/obras/${obraId}/rota/kmz`, {
+    method: "POST", headers: { Authorization: `Bearer ${token ?? ""}` }, body: form,
+  })) as Promise<{ ok: boolean; trechos_importados: number; extensao_total_m: number }>;
+}
+
+export type AvancoLinear = {
+  extensao_total_m: number; executado_m: number; percentual: number | null;
+  trechos: { id: string; nome: string; diametro_mm: number | null; material: string | null; extensao_m: number; executado_m: number; percentual: number | null }[];
+  historico_diario: { data: string; executado_m: number; avanco_dia_m: number; chuva_mm: number | null; umidade_pct: number | null; choveu: boolean }[];
+  produtividade: { media_geral_m_dia: number | null; media_dia_chuvoso_m_dia: number | null; media_dia_seco_m_dia: number | null; dias_com_historico: number; dias_de_chuva: number };
+  previsao: { dias_restantes: number; data_prevista: string; metros_restantes: number } | null;
+  clima_disponivel: boolean;
+};
+export async function getAvancoLinear(obraId: string) { return financeiroResposta(await fetch(`${API_URL}/eng/obras/${obraId}/avanco-linear`, { headers: authHeaders(), cache: "no-store" })) as Promise<AvancoLinear>; }
 
 export async function getVoos(obraId?: string) { const q = obraId ? `?obra_id=${obraId}` : ""; return financeiroResposta(await fetch(`${API_URL}/eng/voos${q}`, { headers: authHeaders(), cache: "no-store" })) as Promise<Voo[]>; }
 export async function getVoo(id: string) { return financeiroResposta(await fetch(`${API_URL}/eng/voos/${id}`, { headers: authHeaders(), cache: "no-store" })) as Promise<Voo>; }

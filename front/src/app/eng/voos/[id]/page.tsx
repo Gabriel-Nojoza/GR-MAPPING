@@ -378,6 +378,7 @@ export default function VooDetalhe() {
                 )}
                 <div className="flex items-center justify-between gap-1 p-1.5 text-[11px] text-slate-500">
                   <span className="truncate">{eVideo ? (f.gps_lat != null ? "🎬 vídeo · 📍 GPS" : "🎬 vídeo") : f.gps_lat != null ? "📍 GPS" : "sem GPS"}</span>
+                  {f.progressiva_m != null && <span className="shrink-0 rounded bg-emerald-50 px-1.5 py-0.5 font-medium text-emerald-700" title="Posição no trecho da obra">≈{Math.round(f.progressiva_m)} m</span>}
                   {f.gps_lat != null && <button onClick={() => usarGps(f.gps_lat!, f.gps_lon!)} className="shrink-0 rounded bg-indigo-50 px-1.5 py-0.5 text-primary hover:bg-indigo-100">usar aqui</button>}
                 </div>
                 {pessoasFoto && (

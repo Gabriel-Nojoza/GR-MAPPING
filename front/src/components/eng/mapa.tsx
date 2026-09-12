@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import type * as L from "leaflet";
 
-export type PontoMapa = { lat: number; lon: number; cor?: string; titulo?: string; raio?: number };
+export type PontoMapa = { lat: number; lon: number; cor?: string; titulo?: string; raio?: number; rotulo?: string };
 export type SegmentoMapa = { a: PontoMapa; b: PontoMapa; cor?: string; tracejado?: boolean };
 
 const CENTRO_PADRAO: [number, number] = [-14.2, -51.9]; // centro do Brasil
@@ -78,7 +78,11 @@ export function Mapa({
       const m = leaflet.circleMarker([p.lat, p.lon], {
         radius: r, color: "#fff", weight: r >= 8 ? 3 : 2, fillColor: p.cor ?? "#2563eb", fillOpacity: 1,
       }).addTo(grupo);
-      if (p.titulo) m.bindTooltip(p.titulo);
+      if (p.rotulo) {
+        m.bindTooltip(p.rotulo, { permanent: true, direction: "top", offset: [0, -r], className: "rotulo-mapa" });
+      } else if (p.titulo) {
+        m.bindTooltip(p.titulo);
+      }
     });
   }
 

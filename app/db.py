@@ -245,7 +245,10 @@ def init_db() -> None:
                 obra_id TEXT NOT NULL,
                 nome TEXT NOT NULL,
                 geojson TEXT,
-                extensao_prevista_m REAL NOT NULL DEFAULT 0
+                extensao_prevista_m REAL NOT NULL DEFAULT 0,
+                diametro_mm REAL,
+                material TEXT,
+                estacas_json TEXT
             )
         """)
         conn.execute("""
@@ -274,7 +277,9 @@ def init_db() -> None:
                 tirada_em TEXT,
                 tem_qr INTEGER NOT NULL DEFAULT 0,
                 pessoas_json TEXT,
-                contar_pessoas INTEGER NOT NULL DEFAULT 0
+                contar_pessoas INTEGER NOT NULL DEFAULT 0,
+                progressiva_m REAL,
+                frente_id TEXT
             )
         """)
         conn.execute("""
@@ -304,6 +309,18 @@ def init_db() -> None:
                 horas REAL NOT NULL DEFAULT 0,
                 custo_hora_centavos INTEGER NOT NULL DEFAULT 0,
                 UNIQUE(obra_id, data, turno, maquina_id)
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS eng_clima_diario (
+                id TEXT PRIMARY KEY,
+                criado_em TEXT NOT NULL,
+                obra_id TEXT NOT NULL,
+                data TEXT NOT NULL,
+                chuva_mm REAL,
+                umidade_pct REAL,
+                fonte TEXT,
+                UNIQUE(obra_id, data)
             )
         """)
         conn.execute("""
@@ -408,6 +425,26 @@ def init_db() -> None:
             conn.execute("ALTER TABLE eng_voo_fotos ADD COLUMN pessoas_json TEXT")
         if colunas_voo_fotos and "contar_pessoas" not in colunas_voo_fotos:
             conn.execute("ALTER TABLE eng_voo_fotos ADD COLUMN contar_pessoas INTEGER NOT NULL DEFAULT 0")
+
+        # migração leve: progresso de obras lineares — posição (em metros) de
+        # cada captura ao longo da rota importada por KMZ
+        if colunas_voo_fotos and "progressiva_m" not in colunas_voo_fotos:
+            conn.execute("ALTER TABLE eng_voo_fotos ADD COLUMN progressiva_m REAL")
+        if colunas_voo_fotos and "frente_id" not in colunas_voo_fotos:
+            conn.execute("ALTER TABLE eng_voo_fotos ADD COLUMN frente_id TEXT")
+
+        if DATABASE_URL:
+            colunas_frentes = {r["column_name"] for r in conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = %s", ("eng_frentes",)
+            )}
+        else:
+            colunas_frentes = {r["name"] for r in conn.execute("PRAGMA table_info(eng_frentes)")}
+        if colunas_frentes and "diametro_mm" not in colunas_frentes:
+            conn.execute("ALTER TABLE eng_frentes ADD COLUMN diametro_mm REAL")
+        if colunas_frentes and "material" not in colunas_frentes:
+            conn.execute("ALTER TABLE eng_frentes ADD COLUMN material TEXT")
+        if colunas_frentes and "estacas_json" not in colunas_frentes:
+            conn.execute("ALTER TABLE eng_frentes ADD COLUMN estacas_json TEXT")
 
         if DATABASE_URL:
             colunas_usuarios = {r["column_name"] for r in conn.execute(
@@ -1220,12 +1257,15 @@ def excluir_recurso_eng(id_: str) -> bool:
 # monitoramento de produtividade por voo de drone
 # ----------------------------------------------------------------------
 def criar_frente(id_: str, empresa_id: str | None, obra_id: str, nome: str,
-                 geojson: str | None, extensao_prevista_m: float) -> None:
+                 geojson: str | None, extensao_prevista_m: float,
+                 diametro_mm: float | None = None, material: str | None = None,
+                 estacas_json: str | None = None) -> None:
     with _conectar() as conn:
         conn.execute(
-            "INSERT INTO eng_frentes (id, criado_em, empresa_id, obra_id, nome, geojson, extensao_prevista_m) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (id_, _agora(), empresa_id, obra_id, nome, geojson, extensao_prevista_m),
+            "INSERT INTO eng_frentes (id, criado_em, empresa_id, obra_id, nome, geojson, extensao_prevista_m, "
+            "diametro_mm, material, estacas_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (id_, _agora(), empresa_id, obra_id, nome, geojson, extensao_prevista_m,
+             diametro_mm, material, estacas_json),
         )
 
 
@@ -1241,11 +1281,13 @@ def obter_frente(id_: str) -> sqlite3.Row | None:
         return conn.execute("SELECT * FROM eng_frentes WHERE id = ?", (id_,)).fetchone()
 
 
-def atualizar_frente(id_: str, nome: str, geojson: str | None, extensao_prevista_m: float) -> bool:
+def atualizar_frente(id_: str, nome: str, geojson: str | None, extensao_prevista_m: float,
+                     diametro_mm: float | None = None, material: str | None = None) -> bool:
     with _conectar() as conn:
         cur = conn.execute(
-            "UPDATE eng_frentes SET nome = ?, geojson = ?, extensao_prevista_m = ? WHERE id = ?",
-            (nome, geojson, extensao_prevista_m, id_),
+            "UPDATE eng_frentes SET nome = ?, geojson = ?, extensao_prevista_m = ?, "
+            "diametro_mm = ?, material = ? WHERE id = ?",
+            (nome, geojson, extensao_prevista_m, diametro_mm, material, id_),
         )
         return cur.rowcount > 0
 
@@ -1317,12 +1359,14 @@ def excluir_voo(id_: str) -> bool:
 
 def adicionar_foto_voo(id_: str, voo_id: str, nome_arquivo: str, mime: str | None,
                        gps_lat: float | None, gps_lon: float | None,
-                       altitude_m: float | None, tirada_em: str | None) -> None:
+                       altitude_m: float | None, tirada_em: str | None,
+                       progressiva_m: float | None = None, frente_id: str | None = None) -> None:
     with _conectar() as conn:
         conn.execute(
-            "INSERT INTO eng_voo_fotos (id, criado_em, voo_id, nome_arquivo, mime, gps_lat, gps_lon, altitude_m, tirada_em) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (id_, _agora(), voo_id, nome_arquivo, mime, gps_lat, gps_lon, altitude_m, tirada_em),
+            "INSERT INTO eng_voo_fotos (id, criado_em, voo_id, nome_arquivo, mime, gps_lat, gps_lon, altitude_m, "
+            "tirada_em, progressiva_m, frente_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (id_, _agora(), voo_id, nome_arquivo, mime, gps_lat, gps_lon, altitude_m, tirada_em,
+             progressiva_m, frente_id),
         )
 
 
@@ -1437,5 +1481,63 @@ def listar_consumo(obra_id: str, data: str | None = None, turno: str | None = No
         consulta += " AND data = ?"; parametros.append(data)
     if turno:
         consulta += " AND turno = ?"; parametros.append(turno)
+    with _conectar() as conn:
+        return conn.execute(consulta, tuple(parametros)).fetchall()
+
+
+def progressiva_maxima_por_frente(obra_id: str) -> list[sqlite3.Row]:
+    """Maior progressiva_m já registrada em cada trecho da obra (avanço executado)."""
+    with _conectar() as conn:
+        return conn.execute(
+            "SELECT vf.frente_id AS frente_id, MAX(vf.progressiva_m) AS max_m "
+            "FROM eng_voo_fotos vf JOIN eng_voos v ON v.id = vf.voo_id "
+            "WHERE v.obra_id = ? AND vf.progressiva_m IS NOT NULL AND vf.frente_id IS NOT NULL "
+            "GROUP BY vf.frente_id",
+            (obra_id,),
+        ).fetchall()
+
+
+def progressiva_por_dia(obra_id: str) -> list[sqlite3.Row]:
+    """Maior progressiva_m de cada trecho, por dia — histórico pra calcular produtividade diária."""
+    with _conectar() as conn:
+        return conn.execute(
+            "SELECT v.data AS data, vf.frente_id AS frente_id, MAX(vf.progressiva_m) AS max_m "
+            "FROM eng_voo_fotos vf JOIN eng_voos v ON v.id = vf.voo_id "
+            "WHERE v.obra_id = ? AND vf.progressiva_m IS NOT NULL AND vf.frente_id IS NOT NULL "
+            "GROUP BY v.data, vf.frente_id ORDER BY v.data ASC",
+            (obra_id,),
+        ).fetchall()
+
+
+def salvar_clima_diario(id_: str, obra_id: str, data: str, chuva_mm: float | None,
+                        umidade_pct: float | None, fonte: str) -> None:
+    with _conectar() as conn:
+        if DATABASE_URL:
+            conn.execute(
+                "INSERT INTO eng_clima_diario (id, criado_em, obra_id, data, chuva_mm, umidade_pct, fonte) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT (obra_id, data) DO UPDATE SET chuva_mm = EXCLUDED.chuva_mm, "
+                "umidade_pct = EXCLUDED.umidade_pct, fonte = EXCLUDED.fonte",
+                (id_, _agora(), obra_id, data, chuva_mm, umidade_pct, fonte),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO eng_clima_diario (id, criado_em, obra_id, data, chuva_mm, umidade_pct, fonte) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT (obra_id, data) DO UPDATE SET chuva_mm = excluded.chuva_mm, "
+                "umidade_pct = excluded.umidade_pct, fonte = excluded.fonte",
+                (id_, _agora(), obra_id, data, chuva_mm, umidade_pct, fonte),
+            )
+
+
+def listar_clima_diario(obra_id: str, data_inicio: str | None = None,
+                        data_fim: str | None = None) -> list[sqlite3.Row]:
+    consulta = "SELECT * FROM eng_clima_diario WHERE obra_id = ?"
+    parametros: list = [obra_id]
+    if data_inicio:
+        consulta += " AND data >= ?"; parametros.append(data_inicio)
+    if data_fim:
+        consulta += " AND data <= ?"; parametros.append(data_fim)
+    consulta += " ORDER BY data ASC"
     with _conectar() as conn:
         return conn.execute(consulta, tuple(parametros)).fetchall()
