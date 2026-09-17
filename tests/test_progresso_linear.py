@@ -4,6 +4,7 @@ sobe duas capturas com GPS em pontos diferentes da rota, e confere que o
 sistema detecta corretamente até onde chegou e quantos metros avançou.
 """
 import io
+import json
 import sys
 from pathlib import Path
 
@@ -107,10 +108,86 @@ def test_avanco_detectado_entre_duas_capturas(monkeypatch):
     print(f"  [ok] avanço detectado entre as duas capturas: {avanco_dia2} m (esperado ~200 m)")
 
 
+def test_forcar_rota_das_capturas_atualiza_a_mesma_frente(monkeypatch):
+    """O endpoint manual (não usado mais pela tela, mas continua disponível)
+    tem que ATUALIZAR o trecho indicado por `frente_id`, não duplicar — a
+    rota automática já roda sozinha a cada upload (ver o outro teste)."""
+    monkeypatch.setattr(clima_module, "buscar_historico", _sem_rede)
+    monkeypatch.setattr(clima_module, "buscar_previsao", _sem_rede)
+
+    r = client.post("/eng/recursos/obra", json={"nome": "Obra Sem Rota Previa", "dados": {}})
+    obra_id = r.json()["id"]
+
+    r = client.post("/eng/voos", json={"obra_id": obra_id, "data": "2024-02-01", "turno": "Manhã"})
+    voo1 = r.json()["id"]
+    client.post(f"/eng/voos/{voo1}/fotos", files={"fotos": ("a.jpg", _foto_com_gps(LAT0, LON0), "image/jpeg")})
+
+    r = client.post("/eng/voos", json={"obra_id": obra_id, "data": "2024-02-01", "turno": "Tarde"})
+    voo2 = r.json()["id"]
+    client.post(f"/eng/voos/{voo2}/fotos", files={"fotos": ("b.jpg", _foto_com_gps(LAT1, LON0), "image/jpeg")})
+
+    # a rota automática já deve ter sido criada sozinha nesse ponto
+    frentes = client.get("/eng/frentes", params={"obra_id": obra_id}).json()
+    assert len(frentes) == 1
+    frente_id = frentes[0]["id"]
+
+    r = client.post(f"/eng/obras/{obra_id}/rota/capturas", json={"frente_id": frente_id, "nome": "Rua Renomeada"})
+    assert r.status_code == 200, r.text
+    resultado = r.json()
+    assert resultado["pontos"] == 2
+    assert abs(resultado["extensao_m"] - 500.0) < 3
+    assert resultado["frente_id"] == frente_id
+
+    frentes = client.get("/eng/frentes", params={"obra_id": obra_id}).json()
+    assert len(frentes) == 1, "não podia ter criado um trecho novo, só atualizado o existente"
+    assert frentes[0]["nome"] == "Rua Renomeada"
+    print(f"  [ok] endpoint manual atualiza o trecho existente em vez de duplicar: {resultado['extensao_m']} m")
+
+
+def test_rota_automatica_ao_subir_foto_e_recalculo_retroativo(monkeypatch):
+    """Ninguém precisa clicar em nada: a primeira foto ainda não forma rota
+    (só 1 ponto), mas assim que a segunda sobe, o sistema traça a rota
+    sozinho E corrige retroativamente a posição da primeira foto, que tinha
+    ficado sem rota pra se projetar quando foi enviada."""
+    monkeypatch.setattr(clima_module, "buscar_historico", _sem_rede)
+    monkeypatch.setattr(clima_module, "buscar_previsao", _sem_rede)
+
+    r = client.post("/eng/recursos/obra", json={"nome": "Obra Rota Automatica", "dados": {}})
+    obra_id = r.json()["id"]
+
+    r = client.post("/eng/voos", json={"obra_id": obra_id, "data": "2024-03-01", "turno": "Manhã"})
+    voo1 = r.json()["id"]
+    client.post(f"/eng/voos/{voo1}/fotos", files={"fotos": ("a.jpg", _foto_com_gps(LAT0, LON0), "image/jpeg")})
+
+    assert client.get("/eng/frentes", params={"obra_id": obra_id}).json() == []
+    foto1_antes = client.get(f"/eng/voos/{voo1}").json()["fotos"][0]
+    assert foto1_antes["progressiva_m"] is None
+    print("  [ok] só 1 foto ainda: nenhuma rota criada, progressiva vazia")
+
+    r = client.post("/eng/voos", json={"obra_id": obra_id, "data": "2024-03-01", "turno": "Tarde"})
+    voo2 = r.json()["id"]
+    client.post(f"/eng/voos/{voo2}/fotos", files={"fotos": ("b.jpg", _foto_com_gps(LAT1, LON0), "image/jpeg")})
+
+    frentes = client.get("/eng/frentes", params={"obra_id": obra_id}).json()
+    assert len(frentes) == 1
+    assert frentes[0]["nome"] == "Rota automática (das capturas)"
+    print(f"  [ok] 2ª foto: rota criada sozinha, {frentes[0]['extensao_prevista_m']} m")
+
+    foto1_depois = client.get(f"/eng/voos/{voo1}").json()["fotos"][0]
+    assert abs(foto1_depois["progressiva_m"] - 0.0) < 2, "a 1ª foto deveria ter sido recalculada pra ~0 m (é o início da rota)"
+    foto2 = client.get(f"/eng/voos/{voo2}").json()["fotos"][0]
+    assert abs(foto2["progressiva_m"] - 500.0) < 3
+    print(f"  [ok] recálculo retroativo: 1ª foto agora tem progressiva {foto1_depois['progressiva_m']} m")
+
+
 _KML_EXEMPLO = """<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
 <Document>
   <name>Rota Exemplo</name>
+  <Placemark>
+    <name>Reservatório Teste</name>
+    <Point><coordinates>{lon0},{lat0},0</coordinates></Point>
+  </Placemark>
   <Folder>
     <name>TRECHO DN300 - TESTE</name>
     <Placemark>
@@ -156,5 +233,13 @@ def test_importar_kmz_cria_trechos_com_extensao_esperada():
     assert trecho["diametro_mm"] == 300.0
     assert len(trecho["estacas"]) == 1
     assert trecho["estacas"][0]["cota_tn"] == 50.0
+
+    assert resultado["marcos_importados"] == 1
+    obra = next(o for o in client.get("/eng/recursos/obra").json() if o["id"] == obra_id)
+    marcos = json.loads(obra["dados"]["marcos_kmz"])
+    assert len(marcos) == 1
+    assert marcos[0]["nome"] == "Reservatório Teste"
+    assert marcos[0]["tipo"] == "reservatorio"
+
     print(f"  [ok] KMZ importado: {resultado['trechos_importados']} trecho(s), "
-          f"{resultado['extensao_total_m']} m")
+          f"{resultado['extensao_total_m']} m, {resultado['marcos_importados']} marco(s)")

@@ -1370,6 +1370,14 @@ def adicionar_foto_voo(id_: str, voo_id: str, nome_arquivo: str, mime: str | Non
         )
 
 
+def atualizar_progressiva_foto(id_: str, progressiva_m: float | None, frente_id: str | None) -> None:
+    with _conectar() as conn:
+        conn.execute(
+            "UPDATE eng_voo_fotos SET progressiva_m = ?, frente_id = ? WHERE id = ?",
+            (progressiva_m, frente_id, id_),
+        )
+
+
 def listar_fotos_voo(voo_id: str) -> list[sqlite3.Row]:
     with _conectar() as conn:
         return conn.execute(

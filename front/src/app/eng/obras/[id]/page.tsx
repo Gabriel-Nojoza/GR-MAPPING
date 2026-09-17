@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { ArrowLeft, CloudRain, FileUp, Map as MapIcon, Plane, Ruler, TrendingUp } from "lucide-react";
+import { ArrowLeft, CalendarClock, CloudRain, FileUp, Map as MapIcon, Plane, Ruler, TrendingUp } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Mapa, type PontoMapa, type SegmentoMapa } from "@/components/eng/mapa";
@@ -13,7 +13,8 @@ import {
   getAvancoLinear, getFrentes, getRecursosEng, getVoos, importarRotaKmz,
   type AvancoLinear, type Frente, type RecursoEng, type Voo,
 } from "@/lib/api";
-import { segmentosExecutados, segmentosLinha } from "@/lib/geo";
+import { pontoNaLinha, segmentosExecutados, segmentosLinha } from "@/lib/geo";
+import { corDoMarco, marcosDaObra } from "@/lib/marcos";
 
 // uma cor por trecho, pra diferenciar os alinhamentos no mapa (e nas estacas de cada um)
 const PALETA_TRECHOS = ["#ef4444", "#8b5cf6", "#f97316", "#0ea5e9", "#eab308", "#ec4899", "#14b8a6"];
@@ -76,6 +77,29 @@ export default function ObraProgresso() {
     return saida;
   }, [frentes]);
 
+  // marcos soltos do KMZ (travessia, reservatório, ETA, booster, canteiro...)
+  const pontosMarcos = useMemo((): PontoMapa[] => {
+    return marcosDaObra(obra?.dados).map((m) => ({ lat: m.lat, lon: m.lon, cor: corDoMarco(m.tipo), raio: 6, titulo: m.nome }));
+  }, [obra]);
+
+  // marca no mapa, com o número em metros, até onde cada trecho já avançou
+  const pontosProgresso = useMemo((): PontoMapa[] => {
+    const saida: PontoMapa[] = [];
+    frentes.forEach((f) => {
+      const coords = (f.geojson?.coordinates ?? []) as [number, number][];
+      const exec = executadoPorFrente.get(f.id) ?? 0;
+      if (coords.length < 2 || exec <= 0) return;
+      const ponto = pontoNaLinha(coords, exec);
+      if (!ponto) return;
+      saida.push({
+        lat: ponto.lat, lon: ponto.lon, cor: "#10b981", raio: 6,
+        rotulo: `${Math.round(exec)} m`,
+        titulo: `${f.nome} — ${Math.round(exec)} m executados`,
+      });
+    });
+    return saida;
+  }, [frentes, executadoPorFrente]);
+
   const center = useMemo((): [number, number] | null => {
     const primeiro = frentes.find((f) => (f.geojson?.coordinates?.length ?? 0) > 0);
     if (primeiro) {
@@ -110,11 +134,19 @@ export default function ObraProgresso() {
     ? Math.round(100 * (1 - produtividade.media_dia_chuvoso_m_dia / produtividade.media_dia_seco_m_dia))
     : null;
 
+  const prazo = avanco.status_prazo;
+  const prazoTexto = prazo.situacao === "atrasada" ? `${Math.abs(prazo.dias_diferenca ?? 0)} dia(s) atrasada`
+    : prazo.situacao === "adiantada" ? `${Math.abs(prazo.dias_diferenca ?? 0)} dia(s) adiantada`
+    : prazo.situacao === "no_prazo" ? "no prazo"
+    : prazo.previsao_termino_planejada ? "ainda sem dados suficientes" : "sem previsão de término cadastrada";
+  const prazoCor = prazo.situacao === "atrasada" ? "text-red-600" : prazo.situacao === "adiantada" ? "text-emerald-600" : "text-slate-900";
+
   const kpis = [
     { icon: Ruler, label: "Extensão total", valor: `${Math.round(avanco.extensao_total_m)} m`, nota: `${frentes.length} trecho(s)` },
     { icon: TrendingUp, label: "Executado", valor: `${Math.round(avanco.executado_m)} m`, nota: avanco.percentual != null ? `${avanco.percentual}% concluído` : "—" },
     { icon: Plane, label: "Produtividade média", valor: produtividade.media_geral_m_dia != null ? `${produtividade.media_geral_m_dia} m/dia` : "—", nota: `${produtividade.dias_com_historico} dia(s) com captura` },
     { icon: CloudRain, label: "Impacto da chuva", valor: impactoChuva != null ? `-${impactoChuva}%` : "—", nota: avanco.clima_disponivel ? "produtividade em dia de chuva" : "sem localização p/ clima" },
+    { icon: CalendarClock, label: "Situação do prazo", valor: prazoTexto, nota: prazo.previsao_termino_planejada ? `previsto pra ${new Date(prazo.previsao_termino_planejada + "T00:00:00").toLocaleDateString("pt-BR")}` : "cadastre a previsão de término na obra", cor: prazoCor },
   ];
 
   return (
@@ -134,19 +166,19 @@ export default function ObraProgresso() {
             <FileUp size={15} /> {subindoKmz ? "Importando…" : "Importar KMZ/KML"}
             <input ref={kmzRef} type="file" accept=".kmz,.kml" className="hidden" onChange={(e) => importarKmz(e.target.files)} />
           </label>
-          <Button variant="secondary" onClick={() => setMostrarRota(true)}><MapIcon size={15} /> Desenhar rota manualmente</Button>
+          <Button variant="secondary" onClick={() => setMostrarRota(true)}><MapIcon size={15} /> Editar rota / marcos</Button>
         </div>
       </div>
 
       {msg && <p className="mt-3 rounded-lg bg-emerald-50 px-4 py-2 text-sm text-emerald-700">{msg}</p>}
       {erro && <p className="mt-3 rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700">{erro}</p>}
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {kpis.map((k) => (
           <Card key={k.label} className="p-5">
-            <k.icon className="text-primary" size={20} />
+            <k.icon className={k.cor ?? "text-primary"} size={20} />
             <p className="mt-3 text-sm text-slate-500">{k.label}</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">{k.valor}</p>
+            <p className={`mt-1 text-2xl font-semibold ${k.cor ?? "text-slate-900"}`}>{k.valor}</p>
             <p className="mt-1 text-xs text-slate-400">{k.nota}</p>
           </Card>
         ))}
@@ -154,7 +186,7 @@ export default function ObraProgresso() {
 
       <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_380px]">
         <Card className="p-3">
-          <Mapa center={center} zoom={center ? 15 : 4} busca segmentos={segmentos} pontos={pontosEstacas} altura="480px" />
+          <Mapa center={center} zoom={center ? 15 : 4} busca segmentos={segmentos} pontos={[...pontosMarcos, ...pontosEstacas, ...pontosProgresso]} altura="480px" />
           <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
             {frentes.map((f, i) => (
               <span key={f.id} className="inline-flex items-center gap-1">
@@ -163,6 +195,9 @@ export default function ObraProgresso() {
               </span>
             ))}
             <span className="inline-flex items-center gap-1"><span className="inline-block h-1 w-4 rounded bg-emerald-500" /> executado</span>
+            {pontosMarcos.length > 0 && (
+              <span className="inline-flex items-center gap-1"><span className="inline-block size-2 rounded-full bg-slate-400" /> {pontosMarcos.length} marco(s) do projeto (travessias, reservatório...)</span>
+            )}
           </p>
         </Card>
 

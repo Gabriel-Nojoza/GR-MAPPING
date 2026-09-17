@@ -46,6 +46,42 @@ class TrechoImportado:
     estacas: list[Estaca] = field(default_factory=list)
 
 
+@dataclass
+class Marco:
+    """Ponto de referência solto no KMZ que não faz parte do traçado em si —
+    travessia, reservatório, ETA, booster, canteiro de obras etc."""
+    nome: str
+    lat: float
+    lon: float
+    tipo: str = "outro"
+
+
+@dataclass
+class ResultadoImportacao:
+    trechos: list[TrechoImportado] = field(default_factory=list)
+    marcos: list[Marco] = field(default_factory=list)
+
+
+_TIPOS_MARCO = (
+    ("travessia", "travessia"),
+    ("reservat", "reservatorio"),
+    ("eta ", "eta"),
+    ("estação de tratamento", "eta"),
+    ("booster", "booster"),
+    ("injet", "interligacao"),
+    ("canteiro", "canteiro"),
+    ("baia", "canteiro"),
+)
+
+
+def _tipo_marco(nome: str) -> str:
+    baixo = nome.lower()
+    for chave, tipo in _TIPOS_MARCO:
+        if chave in baixo:
+            return tipo
+    return "outro"
+
+
 def _tag(elemento) -> str:
     """Remove o prefixo de namespace ("{...}Placemark" -> "Placemark")."""
     t = elemento.tag
@@ -175,11 +211,24 @@ def _concatenar_linhas(linhas: list[list[tuple[float, float]]]) -> list[tuple[fl
     return coords
 
 
-def _percorrer(pasta, encontrados: list[TrechoImportado]) -> None:
+def _marco_do_placemark(placemark) -> Marco | None:
+    ponto = _point_do_placemark(placemark)
+    if ponto is None:
+        return None
+    nome = _nome_de(placemark)
+    if not nome:
+        return None
+    lon, lat = ponto
+    return Marco(nome=nome, lat=lat, lon=lon, tipo=_tipo_marco(nome))
+
+
+def _percorrer(pasta, resultado: ResultadoImportacao) -> None:
     """Percorre pastas recursivamente; toda pasta com Placemark(s) de LineString
     vira um trecho (várias LineStrings na mesma pasta são concatenadas, na
     ordem em que aparecem — comum quando o trecho muda de diâmetro no meio),
-    junto com a pasta irmã "ESTACA*" (se existir)."""
+    junto com a pasta irmã "ESTACA*" (se existir). Pastas sem LineString têm
+    seus Placemarks de Point coletados como "marcos" (travessia, reservatório,
+    ETA, canteiro...) — pontos de referência que não fazem parte do traçado."""
     subpastas = _filhos(pasta, "Folder")
     placemarks = _filhos(pasta, "Placemark")
 
@@ -205,12 +254,18 @@ def _percorrer(pasta, encontrados: list[TrechoImportado]) -> None:
                     continue
                 estaca.progressiva_m = geo.progressiva(coords, estaca.lat, estaca.lon)
                 trecho.estacas.append(estaca)
-        encontrados.append(trecho)
+        resultado.trechos.append(trecho)
         # não desce mais nessa pasta — a pasta de estacas já foi tratada acima
         return
 
+    # pasta sem traçado: os Placemarks de ponto aqui são marcos avulsos
+    for pm in placemarks:
+        marco = _marco_do_placemark(pm)
+        if marco is not None:
+            resultado.marcos.append(marco)
+
     for sub in subpastas:
-        _percorrer(sub, encontrados)
+        _percorrer(sub, resultado)
 
 
 def _carregar_kml_bytes(dados: bytes) -> bytes:
@@ -223,15 +278,20 @@ def _carregar_kml_bytes(dados: bytes) -> bytes:
     return dados
 
 
-def parse_kmz_kml(dados: bytes) -> list[TrechoImportado]:
-    """Extrai os trechos (traçado + estacas) de um arquivo .kmz ou .kml."""
+def parse_kmz_kml(dados: bytes) -> ResultadoImportacao:
+    """Extrai os trechos (traçado + estacas) e os marcos soltos (travessia,
+    reservatório, ETA, canteiro...) de um arquivo .kmz ou .kml."""
     kml_bytes = _carregar_kml_bytes(dados)
     raiz = ET.fromstring(kml_bytes)
     documento_encontrado = _filho(raiz, "Document")
     documento = documento_encontrado if documento_encontrado is not None else raiz
-    encontrados: list[TrechoImportado] = []
-    # só desce em pastas (Folder) — Placemarks soltos direto no Document são
-    # marcos avulsos (reservatório, travessias, canteiro...), não o traçado
+    resultado = ResultadoImportacao()
+    # Placemarks soltos direto no Document (fora de qualquer Folder) também
+    # são marcos avulsos — é onde o reservatório/ETA/travessias costumam estar
+    for pm in _filhos(documento, "Placemark"):
+        marco = _marco_do_placemark(pm)
+        if marco is not None:
+            resultado.marcos.append(marco)
     for sub in _filhos(documento, "Folder"):
-        _percorrer(sub, encontrados)
-    return encontrados
+        _percorrer(sub, resultado)
+    return resultado

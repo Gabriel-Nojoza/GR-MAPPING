@@ -12,6 +12,7 @@ import {
   getRecursosEng, getVoo,
   type Deteccao, type RecursoEng, type Voo,
 } from "@/lib/api";
+import { arquivosDoItem, listarFila, removerDaFila, salvarNaFila, type ItemFila } from "@/lib/fila-upload";
 
 export default function VooDetalhe() {
   const { id } = useParams<{ id: string }>();
@@ -26,7 +27,19 @@ export default function VooDetalhe() {
   const [editandoContorno, setEditandoContorno] = useState(false);
   const [pontosContorno, setPontosContorno] = useState<[number, number][]>([]);
   const [salvandoContorno, setSalvandoContorno] = useState(false);
+  const [pendentes, setPendentes] = useState<ItemFila[]>([]);
+  const [reenviando, setReenviando] = useState(false);
+  const [online, setOnline] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setOnline(navigator.onLine);
+    const ligar = () => setOnline(true);
+    const desligar = () => setOnline(false);
+    window.addEventListener("online", ligar);
+    window.addEventListener("offline", desligar);
+    return () => { window.removeEventListener("online", ligar); window.removeEventListener("offline", desligar); };
+  }, []);
 
   const carregar = useCallback(async () => {
     try {
@@ -122,6 +135,43 @@ export default function VooDetalhe() {
   // fotos primeiro, máquinas por cima
   const pontos = [...pontosFotos, ...pontosMaquinas];
 
+  const carregarPendentes = useCallback(() => { listarFila(id).then(setPendentes).catch(() => {}); }, [id]);
+  useEffect(() => { carregarPendentes(); }, [carregarPendentes]);
+
+  // sem internet no meio do envio: guarda os arquivos no aparelho (IndexedDB)
+  // em vez de simplesmente falhar — a equipe não perde a captura, e o envio
+  // completa sozinho quando a conexão voltar (ou reabrindo o app depois).
+  const eFalhaDeRede = (e: unknown) => !navigator.onLine || e instanceof TypeError;
+
+  async function tentarReenviarPendentes() {
+    if (reenviando || !navigator.onLine) return;
+    const fila = await listarFila(id);
+    if (!fila.length) return;
+    setReenviando(true);
+    let falhaReal = false;
+    try {
+      for (const item of fila) {
+        try {
+          await enviarFotosVoo(id, arquivosDoItem(item));
+          await removerDaFila(item.id);
+        } catch (e) {
+          if (eFalhaDeRede(e)) break; // ainda sem internet — para e tenta de novo depois
+          falhaReal = true; // erro real (não é de conexão) — mantém guardado, não descarta a captura
+        }
+      }
+    } finally {
+      setReenviando(false);
+      carregarPendentes();
+      await carregar();
+      if (falhaReal) setErro("Um dos arquivos guardados não pôde ser enviado (erro do servidor, não de conexão) — continua guardado pra tentar de novo depois.");
+    }
+  }
+  useEffect(() => {
+    window.addEventListener("online", tentarReenviarPendentes);
+    return () => window.removeEventListener("online", tentarReenviarPendentes);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
   async function upload(files: FileList | null) {
     if (!files?.length) return;
     const arr = Array.from(files);
@@ -142,8 +192,16 @@ export default function VooDetalhe() {
       if (r.processando) {
         [4000, 12000, 25000, 45000, 75000, 120000].forEach((ms) => setTimeout(() => { void carregar(); }, ms));
       }
-    } catch (e) { setErro(e instanceof Error ? e.message : "Falha no upload."); }
-    finally {
+    } catch (e) {
+      if (eFalhaDeRede(e)) {
+        await salvarNaFila(id, arr);
+        if (fileRef.current) fileRef.current.value = "";
+        carregarPendentes();
+        setAviso(`Sem conexão — ${arr.length} arquivo(s) guardado(s) no aparelho. Serão enviados sozinhos quando a internet voltar.`);
+      } else {
+        setErro(e instanceof Error ? e.message : "Falha no upload.");
+      }
+    } finally {
       setSubindo(false);
       setTimeout(() => { previews.forEach((p) => URL.revokeObjectURL(p.url)); setScanPreviews([]); }, 600);
     }
@@ -284,6 +342,21 @@ export default function VooDetalhe() {
             )}
 
             {aviso && <p className="mt-2 rounded-lg bg-indigo-50 px-3 py-2 text-xs text-primary">{aviso}</p>}
+            {pendentes.length > 0 && (
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                <span>
+                  {pendentes.reduce((n, p) => n + p.arquivos.length, 0)} arquivo(s) aguardando conexão pra enviar
+                  {!online ? " (sem internet agora)" : ""}.
+                </span>
+                <button
+                  onClick={() => void tentarReenviarPendentes()}
+                  disabled={reenviando || !online}
+                  className="shrink-0 rounded bg-amber-100 px-2 py-1 font-medium hover:bg-amber-200 disabled:opacity-50"
+                >
+                  {reenviando ? "Enviando…" : "Tentar enviar agora"}
+                </button>
+              </div>
+            )}
             {semGps && (
               <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
                 Nenhuma foto tem GPS. Screenshots e frames de vídeo perdem o GPS — use os arquivos originais <b>.JPG</b> do cartão SD. Sem GPS, posicione as máquinas clicando no mapa.

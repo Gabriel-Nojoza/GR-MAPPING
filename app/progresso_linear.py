@@ -20,14 +20,17 @@ TETO_SIMULACAO_DIAS = 3650  # trava de segurança pra não simular pra sempre se
 FRACAO_CHUVOSA_PADRAO = 0.2  # usado só se a obra ainda não tem nenhum dia de chuva registrado no histórico
 
 
-def _obra_lat_lon(obra_id: str) -> tuple[float, float] | None:
+def _obra_dados(obra_id: str) -> dict:
     obra = db.obter_recurso_eng(obra_id)
     if obra is None:
-        return None
+        return {}
     try:
-        dados = json.loads(obra["dados_json"]) if obra["dados_json"] else {}
+        return json.loads(obra["dados_json"]) if obra["dados_json"] else {}
     except (TypeError, ValueError):
-        dados = {}
+        return {}
+
+
+def _lat_lon(dados: dict) -> tuple[float, float] | None:
     try:
         lat = float(dados.get("localizacao_lat"))
         lon = float(dados.get("localizacao_lon"))
@@ -133,6 +136,24 @@ def _prever_conclusao(restante_m: float, produtividade: dict, lat: float | None,
     }
 
 
+def _status_prazo(previsao: dict | None, previsao_termino_cadastrada: str | None) -> dict:
+    """Compara a previsão de conclusão recalculada (pela produtividade real)
+    com o prazo que a empresa cadastrou pra obra — responde "adiantada ou
+    atrasada?" direto, um dos pontos que o cliente pediu."""
+    saida = {"situacao": None, "dias_diferenca": None, "previsao_termino_planejada": previsao_termino_cadastrada or None}
+    if not previsao_termino_cadastrada or not previsao:
+        return saida
+    try:
+        planejada = date.fromisoformat(previsao_termino_cadastrada)
+        prevista = date.fromisoformat(previsao["data_prevista"])
+    except ValueError:
+        return saida
+    diferenca = (prevista - planejada).days
+    saida["dias_diferenca"] = diferenca
+    saida["situacao"] = "atrasada" if diferenca > 0 else "adiantada" if diferenca < 0 else "no_prazo"
+    return saida
+
+
 def calcular_avanco_linear(obra_id: str) -> dict:
     trechos_db = _trechos_da_obra(obra_id)
     executado_por_frente = _executado_por_trecho(obra_id)
@@ -158,7 +179,8 @@ def calcular_avanco_linear(obra_id: str) -> dict:
 
     datas, total_por_dia = _historico_bruto(obra_id)
 
-    coordenada = _obra_lat_lon(obra_id)
+    dados_obra = _obra_dados(obra_id)
+    coordenada = _lat_lon(dados_obra)
     if coordenada and datas:
         _garantir_clima_cacheado(obra_id, coordenada[0], coordenada[1], datas)
     clima_por_data = {}
@@ -186,6 +208,7 @@ def calcular_avanco_linear(obra_id: str) -> dict:
     restante_m = max(0.0, extensao_total_m - executado_total_m)
     lat, lon = coordenada if coordenada else (None, None)
     previsao = _prever_conclusao(restante_m, produtividade, lat, lon)
+    status_prazo = _status_prazo(previsao, dados_obra.get("previsao_termino"))
 
     return {
         "extensao_total_m": round(extensao_total_m, 1),
@@ -195,5 +218,6 @@ def calcular_avanco_linear(obra_id: str) -> dict:
         "historico_diario": historico,
         "produtividade": produtividade,
         "previsao": previsao,
+        "status_prazo": status_prazo,
         "clima_disponivel": coordenada is not None,
     }

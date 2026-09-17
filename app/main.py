@@ -1408,6 +1408,7 @@ def criar_frente(dados: FrenteDados, contexto: dict | None = Depends(contexto_us
     geojson_txt = json.dumps(dados.geojson, ensure_ascii=False) if dados.geojson else None
     db.criar_frente(identificador, _empresa_do_contexto(contexto), dados.obra_id, nome, geojson_txt,
                     max(0.0, dados.extensao_prevista_m), dados.diametro_mm, dados.material)
+    _recalcular_progressiva_obra(dados.obra_id)
     return _frente_resposta(db.obter_frente(identificador))
 
 
@@ -1418,6 +1419,7 @@ def atualizar_frente(frente_id: str, dados: FrenteDados):
     geojson_txt = json.dumps(dados.geojson, ensure_ascii=False) if dados.geojson else None
     db.atualizar_frente(frente_id, dados.nome.strip(), geojson_txt,
                         max(0.0, dados.extensao_prevista_m), dados.diametro_mm, dados.material)
+    _recalcular_progressiva_obra(dados.obra_id)
     return {"ok": True}
 
 
@@ -1448,10 +1450,10 @@ def importar_rota_kmz(obra_id: str, arquivo: UploadFile = File(...),
     if len(dados) > 15 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="o arquivo deve ter no máximo 15 MB")
     try:
-        trechos = kmz.parse_kmz_kml(dados)
+        resultado = kmz.parse_kmz_kml(dados)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"não foi possível ler o arquivo ({e})")
-    if not trechos:
+    if not resultado.trechos:
         raise HTTPException(status_code=400, detail="nenhum traçado (linha) foi encontrado no arquivo")
 
     empresa_id = _empresa_do_contexto(contexto)
@@ -1460,7 +1462,7 @@ def importar_rota_kmz(obra_id: str, arquivo: UploadFile = File(...),
             db.excluir_frente(f["id"])
 
     extensao_total = 0.0
-    for t in trechos:
+    for t in resultado.trechos:
         geojson_txt = json.dumps(
             {"type": "LineString", "coordinates": [[lon, lat] for lon, lat in t.coordenadas]},
             ensure_ascii=False,
@@ -1474,7 +1476,124 @@ def importar_rota_kmz(obra_id: str, arquivo: UploadFile = File(...),
                         t.extensao_m, t.diametro_mm, t.material, estacas_txt)
         extensao_total += t.extensao_m
 
-    return {"ok": True, "trechos_importados": len(trechos), "extensao_total_m": round(extensao_total, 1)}
+    if resultado.marcos:
+        marcos_json = json.dumps([
+            {"nome": m.nome, "lat": m.lat, "lon": m.lon, "tipo": m.tipo} for m in resultado.marcos
+        ], ensure_ascii=False)
+        extras = dict(json.loads(obra["dados_json"]) if obra["dados_json"] else {})
+        extras["marcos_kmz"] = marcos_json
+        db.atualizar_recurso_eng(obra_id, obra["nome"], json.dumps(extras, ensure_ascii=False))
+
+    _recalcular_progressiva_obra(obra_id)
+    return {"ok": True, "trechos_importados": len(resultado.trechos),
+            "extensao_total_m": round(extensao_total, 1), "marcos_importados": len(resultado.marcos)}
+
+
+_NOME_ROTA_AUTOMATICA = "Rota automática (das capturas)"
+
+
+def _pontos_gps_obra(obra_id: str) -> list[tuple[str, float, float]]:
+    """(quando, lat, lon) de toda foto/vídeo com GPS já enviado na obra, em
+    ordem cronológica pela data da captura (ou do upload, se a foto não tiver
+    essa data no metadado)."""
+    pontos: list[tuple[str, float, float]] = []
+    for voo in db.listar_voos(None, obra_id):
+        for foto in db.listar_fotos_voo(voo["id"]):
+            if foto["gps_lat"] is None or foto["gps_lon"] is None:
+                continue
+            quando = foto["tirada_em"] or foto["criado_em"]
+            pontos.append((quando, foto["gps_lat"], foto["gps_lon"]))
+    pontos.sort(key=lambda p: p[0])
+    return pontos
+
+
+def _linha_sem_coincidentes(pontos: list[tuple[str, float, float]], tolerancia_m: float = 2.0) -> list[tuple[float, float]]:
+    """Remove pontos praticamente coincidentes (duas fotos quase no mesmo
+    lugar), pra não gerar segmentos de comprimento zero na linha."""
+    filtrados: list[tuple[float, float]] = []
+    for _, lat, lon in pontos:
+        if filtrados and geo.dist_m(filtrados[-1][0], filtrados[-1][1], lat, lon) < tolerancia_m:
+            continue
+        filtrados.append((lat, lon))
+    return filtrados
+
+
+def _recalcular_progressiva_obra(obra_id: str) -> None:
+    """Reprocessa a posição (metros na rota) de toda foto/vídeo já enviado na
+    obra. Precisa rodar de novo toda vez que a rota muda (KMZ importado,
+    trecho editado/gerado) — senão fotos enviadas antes da rota existir (ou
+    antes dela ficar completa) ficam com progressiva_m desatualizado."""
+    frentes = [dict(f) for f in db.listar_frentes(obra_id)]
+    for voo in db.listar_voos(None, obra_id):
+        for foto in db.listar_fotos_voo(voo["id"]):
+            if foto["gps_lat"] is None or foto["gps_lon"] is None:
+                continue
+            resultado = geo.escolher_frente(frentes, foto["gps_lat"], foto["gps_lon"]) if frentes else None
+            db.atualizar_progressiva_foto(foto["id"], resultado[1] if resultado else None, resultado[0] if resultado else None)
+
+
+def _gerar_rota_automatica(obra_id: str, empresa_id: str | None) -> None:
+    """Se a obra ainda não tem nenhuma rota própria (nem KMZ, nem desenhada
+    à mão), traça (ou atualiza) sozinha um trecho ligando o GPS das capturas
+    — quem só quer fotografar não precisa desenhar nada nem clicar em nada."""
+    frentes = list(db.listar_frentes(obra_id))
+    if [f for f in frentes if f["nome"] != _NOME_ROTA_AUTOMATICA]:
+        return  # já existe uma rota de verdade (KMZ ou desenhada) — não mexe
+
+    pontos = _linha_sem_coincidentes(_pontos_gps_obra(obra_id))
+    if len(pontos) < 2:
+        return
+
+    coords = [(lon, lat) for lat, lon in pontos]
+    geojson_txt = json.dumps({"type": "LineString", "coordinates": [[lon, lat] for lon, lat in coords]}, ensure_ascii=False)
+    extensao = round(geo.comprimento_linha(coords), 1)
+
+    auto = next((f for f in frentes if f["nome"] == _NOME_ROTA_AUTOMATICA), None)
+    if auto:
+        db.atualizar_frente(auto["id"], _NOME_ROTA_AUTOMATICA, geojson_txt, extensao)
+    else:
+        db.criar_frente(uuid.uuid4().hex, empresa_id, obra_id, _NOME_ROTA_AUTOMATICA, geojson_txt, extensao)
+
+    _recalcular_progressiva_obra(obra_id)
+
+
+class RotaDasCapturasDados(BaseModel):
+    frente_id: str | None = None
+    nome: str | None = None
+
+
+@app.post("/eng/obras/{obra_id}/rota/capturas")
+def gerar_rota_das_capturas(obra_id: str, dados: RotaDasCapturasDados | None = None,
+                            contexto: dict | None = Depends(contexto_usuario)):
+    """Força a criação/atualização manual de um trecho ligando o GPS das
+    capturas (o normal é isso acontecer sozinho — ver `_gerar_rota_automatica`
+    — este endpoint existe pra forçar um recálculo ou nomear o trecho)."""
+    obra = db.obter_recurso_eng(obra_id)
+    if obra is None or obra["tipo"] != "obra":
+        raise HTTPException(status_code=404, detail="obra não encontrada")
+
+    pontos = _linha_sem_coincidentes(_pontos_gps_obra(obra_id))
+    if len(pontos) < 2:
+        raise HTTPException(status_code=400,
+                            detail="ainda não há capturas com GPS suficientes (precisa de pelo menos 2 pontos distintos)")
+
+    coords = [(lon, lat) for lat, lon in pontos]
+    extensao = round(geo.comprimento_linha(coords), 1)
+    geojson_txt = json.dumps({"type": "LineString", "coordinates": [[lon, lat] for lon, lat in coords]}, ensure_ascii=False)
+    nome = ((dados.nome if dados else None) or "").strip() or "Trecho (gerado das capturas)"
+    empresa_id = _empresa_do_contexto(contexto)
+
+    frente_id_alvo = dados.frente_id if dados else None
+    if frente_id_alvo:
+        if db.obter_frente(frente_id_alvo) is None:
+            raise HTTPException(status_code=404, detail="trecho não encontrado")
+        db.atualizar_frente(frente_id_alvo, nome, geojson_txt, extensao)
+    else:
+        frente_id_alvo = uuid.uuid4().hex
+        db.criar_frente(frente_id_alvo, empresa_id, obra_id, nome, geojson_txt, extensao)
+
+    _recalcular_progressiva_obra(obra_id)
+    return {"ok": True, "frente_id": frente_id_alvo, "pontos": len(coords), "extensao_m": extensao}
 
 
 @app.get("/eng/obras/{obra_id}/avanco-linear")
@@ -1624,6 +1743,7 @@ def enviar_fotos_voo(voo_id: str, background_tasks: BackgroundTasks,
     LIMITE_VIDEO = 500 * 1024 * 1024
 
     salvas, ignorados = 0, 0
+    houve_gps_novo = False
     pendentes: list[tuple[str, str, str, float | None, float | None]] = []
     for foto in fotos:
         nome_lower = (foto.filename or "").lower()
@@ -1686,6 +1806,7 @@ def enviar_fotos_voo(voo_id: str, background_tasks: BackgroundTasks,
                                   vmeta["gps_lat"], vmeta["gps_lon"], vmeta["altitude_m"], vmeta["tirada_em"],
                                   posicao[1] if posicao else None, posicao[0] if posicao else None)
             salvas += 1
+            houve_gps_novo = houve_gps_novo or vmeta["gps_lat"] is not None
             pendentes.append(("vid", foto_id, str(caminho), None, None))
             continue
 
@@ -1698,7 +1819,13 @@ def enviar_fotos_voo(voo_id: str, background_tasks: BackgroundTasks,
                               meta["gps_lat"], meta["gps_lon"], meta["altitude_m"], meta["tirada_em"],
                               posicao[1] if posicao else None, posicao[0] if posicao else None)
         salvas += 1
+        houve_gps_novo = houve_gps_novo or meta["gps_lat"] is not None
         pendentes.append(("img", foto_id, str(caminho), meta["gps_lat"], meta["gps_lon"]))
+
+    # se a obra ainda não tem rota própria, traça/atualiza sozinha ligando o
+    # GPS das capturas — quem só quer fotografar não precisa desenhar nada
+    if houve_gps_novo:
+        _gerar_rota_automatica(voo["obra_id"], empresa_id)
 
     # QR e contagem de pessoas rodam DEPOIS da resposta, em segundo plano —
     # o upload não fica preso esperando (uma foto sem QR chega a ~15s no CPU)

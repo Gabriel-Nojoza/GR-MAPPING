@@ -319,9 +319,15 @@ export type AvancoLinear = {
   historico_diario: { data: string; executado_m: number; avanco_dia_m: number; chuva_mm: number | null; umidade_pct: number | null; choveu: boolean }[];
   produtividade: { media_geral_m_dia: number | null; media_dia_chuvoso_m_dia: number | null; media_dia_seco_m_dia: number | null; dias_com_historico: number; dias_de_chuva: number };
   previsao: { dias_restantes: number; data_prevista: string; metros_restantes: number } | null;
+  status_prazo: { situacao: "atrasada" | "adiantada" | "no_prazo" | null; dias_diferenca: number | null; previsao_termino_planejada: string | null };
   clima_disponivel: boolean;
 };
 export async function getAvancoLinear(obraId: string) { return financeiroResposta(await fetch(`${API_URL}/eng/obras/${obraId}/avanco-linear`, { headers: authHeaders(), cache: "no-store" })) as Promise<AvancoLinear>; }
+export async function gerarRotaDasCapturas(obraId: string, opts?: { frente_id?: string; nome?: string }) {
+  return financeiroResposta(await fetch(`${API_URL}/eng/obras/${obraId}/rota/capturas`, {
+    method: "POST", headers: authHeaders(), body: JSON.stringify(opts ?? {}),
+  })) as Promise<{ ok: boolean; frente_id: string; pontos: number; extensao_m: number }>;
+}
 
 export async function getVoos(obraId?: string) { const q = obraId ? `?obra_id=${obraId}` : ""; return financeiroResposta(await fetch(`${API_URL}/eng/voos${q}`, { headers: authHeaders(), cache: "no-store" })) as Promise<Voo[]>; }
 export async function getVoo(id: string) { return financeiroResposta(await fetch(`${API_URL}/eng/voos/${id}`, { headers: authHeaders(), cache: "no-store" })) as Promise<Voo>; }

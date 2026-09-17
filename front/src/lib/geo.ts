@@ -51,6 +51,28 @@ export function segmentosExecutados(
   return segmentos;
 }
 
+/** Ponto (lat,lon) exatamente a `distanciaM` metros do início da linha —
+ * interpolado dentro do segmento certo. Usado pra marcar no mapa "até onde
+ * chegou" com um rótulo mostrando os metros. null se a linha for curta
+ * demais ou a distância for maior que o comprimento da linha. */
+export function pontoNaLinha(coords: [number, number][], distanciaM: number): { lat: number; lon: number } | null {
+  if (coords.length < 2 || distanciaM < 0) return null;
+  let acumulado = 0;
+  for (let i = 1; i < coords.length; i++) {
+    const [lon1, lat1] = coords[i - 1];
+    const [lon2, lat2] = coords[i];
+    const segM = haversineM(lat1, lon1, lat2, lon2);
+    if (segM <= 0) continue;
+    if (acumulado + segM >= distanciaM) {
+      const t = (distanciaM - acumulado) / segM;
+      return { lat: lat1 + t * (lat2 - lat1), lon: lon1 + t * (lon2 - lon1) };
+    }
+    acumulado += segM;
+  }
+  const [lonF, latF] = coords[coords.length - 1];
+  return { lat: latF, lon: lonF }; // distância maior que a linha inteira: fica na ponta
+}
+
 /** Linha completa (planejada) como segmentos, todos da mesma cor — usado
  * junto com `segmentosExecutados` quando a obra tem mais de um trecho (o
  * componente Mapa só desenha uma `linha` por vez, mas vários `segmentos`). */
