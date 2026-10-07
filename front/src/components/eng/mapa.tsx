@@ -93,6 +93,7 @@ export function Mapa({
       const mod = await import("leaflet");
       const leaflet = (mod.default ?? mod) as unknown as typeof L;
       if (cancelado || mapRef.current || !divRef.current) return;
+      if ((divRef.current as unknown as { _leaflet_id?: unknown })._leaflet_id) return; // esse container já tem um mapa (dupla montagem)
       leafletRef.current = leaflet;
       const map = leaflet.map(divRef.current, {
         center: center ?? CENTRO_PADRAO,
@@ -159,7 +160,7 @@ export function Mapa({
   return (
     <div className="relative w-full">
       {busca && (
-        <form onSubmit={geocodificar} className="absolute left-2 right-2 top-2 z-[500] flex gap-2 sm:left-14 sm:right-auto sm:w-80">
+        <form onSubmit={geocodificar} className="absolute left-2 right-2 top-2 z-10 flex gap-2 sm:left-14 sm:right-auto sm:w-80">
           <input
             value={termo}
             onChange={(e) => setTermo(e.target.value)}

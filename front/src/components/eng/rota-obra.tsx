@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { Pencil, Plus, Save, Trash2, Undo2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Mapa, type PontoMapa } from "@/components/eng/mapa";
@@ -39,6 +40,8 @@ export function RotaObra({
   const [marcoNome, setMarcoNome] = useState("");
   const [marcoTipo, setMarcoTipo] = useState(TIPOS_MARCO[0].valor);
   const [salvandoMarco, setSalvandoMarco] = useState(false);
+  const [montado, setMontado] = useState(false);
+  useEffect(() => setMontado(true), []);
 
   const lat = Number(obra.dados.localizacao_lat);
   const lon = Number(obra.dados.localizacao_lon);
@@ -149,8 +152,12 @@ export function RotaObra({
 
   const extensaoAtual = comprimentoLinha(pontos);
 
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4">
+  // renderiza direto no <body> (fora da árvore da página) — assim o modal
+  // nunca fica preso atrás de outro elemento por causa de algum ancestral
+  // com transform/overflow que quebre o position:fixed
+  if (!montado) return null;
+  return createPortal(
+    <div className="fixed inset-0 z-[1000] grid place-items-center bg-slate-950/50 p-4">
       <div className="w-full max-w-4xl rounded-2xl bg-white p-5 shadow-xl">
         <div className="flex items-start justify-between">
           <div>
@@ -300,6 +307,7 @@ export function RotaObra({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

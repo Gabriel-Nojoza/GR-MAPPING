@@ -44,7 +44,10 @@ export default function VoosPage() {
   }
 
   async function apagar(id: string) {
-    if (window.confirm("Excluir este voo e todas as fotos dele?")) { await excluirVoo(id); void carregar(); }
+    if (!window.confirm("Excluir este voo e todas as fotos dele?")) return;
+    try { await excluirVoo(id); }
+    catch { /* já não existe (ex.: clicou 2x) — só atualiza a lista, não precisa quebrar a tela */ }
+    void carregar();
   }
 
   return (

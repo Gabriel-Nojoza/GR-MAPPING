@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Save, Trash2, Undo2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Mapa } from "@/components/eng/mapa";
@@ -27,6 +28,8 @@ export function ContornoObra({
   const [pontos, setPontos] = useState<[number, number][]>(inicial);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
+  const [montado, setMontado] = useState(false);
+  useEffect(() => setMontado(true), []);
 
   const lat = Number(obra.dados.localizacao_lat);
   const lon = Number(obra.dados.localizacao_lon);
@@ -50,8 +53,9 @@ export function ContornoObra({
     finally { setSalvando(false); }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4">
+  if (!montado) return null;
+  return createPortal(
+    <div className="fixed inset-0 z-[1000] grid place-items-center bg-slate-950/50 p-4">
       <div className="w-full max-w-3xl rounded-2xl bg-white p-5 shadow-xl">
         <div className="flex items-start justify-between">
           <div>
@@ -87,6 +91,7 @@ export function ContornoObra({
         )}
         {erro && <p className="mt-2 text-sm text-red-600">{erro}</p>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
